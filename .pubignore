@@ -1,0 +1,19 @@
+# Build output and local configuration
+.*
+*.iml
+*.log
+*.jks
+*.keystore
+build/
+coverage/
+doc/api/
+key.properties
+local.properties
+pubspec.lock
+node_modules/
+ephemeral/
+
+# The website and release tooling are distributed with the source repository.
+/docs/
+/vercel.json
+/tool/

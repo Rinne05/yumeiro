@@ -1,0 +1,63 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Local environment & secrets
+/.vercel/
+.env
+.env.*
+!.env.example
+key.properties
+**/*.keystore
+**/*.jks
+
+# IDE & Editor
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+
+# Dart / Pub / Flutter
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/doc/api/
+/build/
+build/
+coverage/
+.widget_preview/
+pubspec.lock
+
+# Symbolication & Obfuscation
+app.*.symbols
+app.*.map.json
+
+# Platform generated artifacts
+**/ios/Flutter/.last_build_id
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+**/android/.gradle/
+**/android/.cxx/
+**/android/local.properties
+**/linux/flutter/ephemeral/
+**/windows/flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+.vercel

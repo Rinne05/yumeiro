@@ -1,0 +1,37 @@
+# Flutter build output and local dependency state
+.dart_tool/
+build/
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
+/pubspec.lock
+/example/pubspec.lock
+
+# Generated platform files
+/example/android/.gradle/
+/example/android/.kotlin/
+/example/android/.cxx/
+/example/android/captures/
+/example/android/local.properties
+/example/android/gradlew
+/example/android/gradlew.bat
+/example/android/gradle/wrapper/gradle-wrapper.jar
+/example/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+/example/linux/flutter/ephemeral/
+
+# Generated documentation and VitePress caches
+/docs/.generated/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/
+/docs/.vitepress/.temp/
+
+# Local editor, environment and signing files
+.idea/
+.vscode/
+*.iml
+.env
+.env.*
+!.env.example
+key.properties
+*.jks
+*.keystore
