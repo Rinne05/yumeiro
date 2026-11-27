@@ -2,7 +2,7 @@
 
 <ApiLink symbol="YumeiroDataTable" /> 在各行之间共享列宽。标准变体适合任务、记录和管理页，默认有表头及卡片底板。[紧凑变体](./compact-table)适合嵌入弹窗或宿主提供的表面。两种变体均可使用常规构造器或 `YumeiroDataTable.sliver`。
 
-先选择「仅显示蓝色任务」再全选，最后恢复全部任务，核对被隐藏的已选项。「午后列车」禁用选择，仍可用该行的详情按钮。「查看触控摘要」用同一组选中键切换到 `compactRowBuilder`。
+先选择「仅显示蓝色任务」再全选，最后恢复全部任务，核对被隐藏的已选项。「午后列车」禁用选择，仍可用该行的详情按钮。切换「禁选项置底」可比较行顺序。「查看触控摘要」用同一组选中键切换到 `compactRowBuilder`。
 
 <ComponentDemo id="data-table" title="数据表选择、筛选与行内操作预览" :overlay-height="510">
 
@@ -16,9 +16,9 @@
 - `columns` 是第一排正文列，`additionalColumnBands` 可追加多排，`trailingColumns` 跨越各排，适合独立操作。用 `showHeader` 调整变体的表头默认设置。
 - `minWidth` 设置列式表格的最小内容宽度。表格会为固定列、选择列、内边距和弹性列预留空间，容器更窄时可横向滚到末列。表头和正文共用列宽和横向滚动位置。
 - 行内按钮各自响应点击。用 `contextMenuBuilder` 为行提供[上下文菜单](./menus)。
-- `items` 为空时居中显示内置空态，启用的表头仍会显示。通过 `emptyPlaceholder` 可以替换整个表格。筛选和排序由宿主处理，更新后的列表通过 `items` 提供。
+- `items` 为空时居中显示内置空态，启用的表头仍会显示。通过 `emptyPlaceholder` 可以替换整个表格。宿主通过 `items` 提供筛选结果和业务排序。
 
-行构建器的 `index` 来自当前 `items` 的顺序，适合显示行号。用稳定的业务键把选择状态与刷新后的记录关联起来。
+行构建器的 `index` 始终是记录在当前 `items` 中的索引。用稳定的业务键把选择状态与刷新后的记录关联起来。
 
 ## 受控选择
 
@@ -31,13 +31,19 @@
 | `single` | 选择另一项时返回仅含新项的集合。再次点已选项会保留选中。 |
 | `multiple` | 全选增删当前 `items` 中可选的键，保留被过滤或禁用的已选项。 |
 
-启用 `showSelectionIndicator` 后，行首显示单选圆点或复选框，标准变体默认开启。有表头的表格和触控摘要提供全选入口。
+启用 `showSelectionIndicator` 后，行首显示单选标记或复选框，标准变体默认开启。复古像素主题的单选外圈和圆点采用与滑块一致的圆角比例。启用 `showHeader` 的多选表格和触控摘要提供全选入口。
 
-单选时，普通表与惰性表都用方向键切换可选行，跳过禁选行，并在首尾停下。
+单选时，普通表与惰性表都用方向键切换可选行，跳过禁选行，并在首尾停下。切换主题预设时，已聚焦的单选控件会保持键盘焦点。
 
 浏览数据时省略 `selection` 或传 `null`。调用方可保留选中集合，稍后恢复选择。同一布局下启停选择会保留使用稳定行键的单元格状态。
 
-使用 `isItemEnabled` 对单项禁用选择。省略 `onChanged` 可以展示只读选择。行的激活动作和选择控件可同时存在，通过各自的处理函数独立控制。可用 `rowSemanticsLabel` 生成读屏用的行名称。
+使用 `isItemEnabled` 对单项禁用选择。该行保留选择列宽，控件中心显示斜线。禁选项原本已选时，保留选中键、行高亮和标记的选中填色，标记内部仅显示斜线。整张表省略 `onChanged` 时，选择只读，各项仍显示通常的选中或未选中标记。关闭 `showSelectionIndicator` 会隐藏行首控件，正文选择依旧遵循 `isItemEnabled`。
+
+<ApiLink symbol="YumeiroTableSelection.moveDisabledToEnd" /> 是可选的 `bool`，默认 `false`，沿用 `items` 的顺序。设为 `true` 时，表格将 `isItemEnabled` 返回 `false` 的行移到当前 `items` 的末尾，两组各自保留原顺序。省略 `isItemEnabled` 时，所有行都沿用传入顺序。只读选择也可以按 `isItemEnabled` 分组。
+
+`cellBuilder` 和 `compactRowBuilder` 继续接收记录在传入 `items` 中的索引。重排仅作用于当前传入的记录。服务端分页时，稳定的 `rowKey` 继续关联跨页的选中键。
+
+行的激活动作和选择控件可同时存在，通过各自的处理函数独立控制。可用 `rowSemanticsLabel` 生成读屏用的行名称。
 
 只提供上下文菜单的纯文本行可以用 Tab 聚焦，按菜单键或 `Shift+F10` 打开菜单。行内已有焦点控件时，也可以从该控件打开行菜单。
 
@@ -48,6 +54,8 @@
 ## 在长列表中按需构建
 
 短列表可直接使用 `YumeiroDataTable(...)`。较长的列表可使用 <ApiLink symbol="YumeiroDataTable.sliver" />，将其放入有界纵向 `CustomScrollView` 的 `slivers`，表格按视口和缓存范围构建行。标准与紧凑变体都支持此入口，且可在同一个滚动视口中与其他 Sliver 组合。
+
+启用 `moveDisabledToEnd` 时，Sliver 会对全部传入的记录检查 `isItemEnabled`，以确定显示顺序。单元格仍按需构建。
 
 用 `pinnedHeader: true` 可以把启用的表头固定在滚动视口顶部。表头全选作用于 `items` 中全部可选记录，包括尚未进入视口的行。应用通过增减传入的 `items` 实现「查看全部」或「隐藏」，并用稳定的 `rowKey` 维护已选记录。[演示标准与紧凑长表](./compact-table#在长列表中按需构建)
 

@@ -27,6 +27,7 @@ class YumeiroMenuVisualButton extends StatefulWidget {
     required this.onPressed,
     this.selected,
     this.checked,
+    this.showsDisabledSelection = false,
     this.highlighted = false,
     this.role = YumeiroItemRole.standard,
     this.autofocus = false,
@@ -42,6 +43,7 @@ class YumeiroMenuVisualButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final bool? selected;
   final bool? checked;
+  final bool showsDisabledSelection;
   final bool highlighted;
   final YumeiroItemRole role;
   final bool autofocus;
@@ -66,9 +68,11 @@ class _YumeiroMenuVisualButtonState extends State<YumeiroMenuVisualButton> {
   Widget build(BuildContext context) {
     Widget surface(BuildContext context, Set<WidgetState> states) {
       var appearance = YumeiroTheme.of(context).visuals.item(widget.role, {
-        ...states,
-        if (widget.highlighted) WidgetState.hovered,
-        if (widget.onPressed == null) WidgetState.disabled,
+        if (!widget.showsDisabledSelection) ...[
+          ...states,
+          if (widget.highlighted) WidgetState.hovered,
+          if (widget.onPressed == null) WidgetState.disabled,
+        ],
         if (widget.selected == true) WidgetState.selected,
       });
       final focus = appearance.focusIndicator;

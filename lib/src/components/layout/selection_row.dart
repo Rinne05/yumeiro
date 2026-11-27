@@ -4,6 +4,7 @@ import '../../foundation/modality.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/theme.dart';
 import '../../theme/visual_role.dart';
+import '../controls/selection_appearance.dart';
 import '../controls/selection_control.dart';
 import 'row_visuals.dart';
 
@@ -40,8 +41,13 @@ class YumeiroSelectionRow extends StatelessWidget {
   /// Additional content aligned with [title] and [subtitle].
   final Widget? footer;
   final bool selected;
+
+  /// Controls selection by this row. An explicitly disabled row marks its
+  /// selection indicator with a slash.
   final bool enabled;
   final bool dense;
+
+  /// Displays the selection without letting the user change it.
   final bool readOnly;
   final bool multiple;
   final bool leadingCheckbox;
@@ -54,6 +60,7 @@ class YumeiroSelectionRow extends StatelessWidget {
     final metrics = YumeiroModalityScope.metricsOf(context);
     final active = enabled && !readOnly && onChanged != null;
     final showsValueOnly = enabled && readOnly;
+    final disabledForItem = !enabled && !readOnly;
     final visualInsets = card ? null : rowVisualInsets(context);
     final role = card ? YumeiroControlRole.neutral : YumeiroItemRole.standard;
     final wrapsText = card || metrics.isTouch;
@@ -68,7 +75,10 @@ class YumeiroSelectionRow extends StatelessWidget {
               selected: selected,
               onToggle: active ? choose : null,
               dense: !metrics.isTouch,
+              disabledForItem: disabledForItem,
             )
+          : disabledForItem
+          ? UnavailableSelectionMark(size: _indicatorSize, selected: selected)
           : selected
           ? ExcludeSemantics(
               child: Icon(theme.icons.check, size: _indicatorSize),
@@ -176,6 +186,9 @@ class YumeiroSelectionRow extends StatelessWidget {
           : YumeiroInteractiveVisualSurface(
               role: role,
               selected: selected,
+              visualOverride: disabledForItem
+                  ? unavailableSelectionVisualOverride(context, role)
+                  : null,
               onTap: active ? choose : null,
               visualInsets: visualInsets,
               child: content,

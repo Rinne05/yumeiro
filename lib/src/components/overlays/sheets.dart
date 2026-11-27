@@ -1,5 +1,6 @@
 import 'dart:ui' show SemanticsValidationResult;
 
+import 'package:flutter/foundation.dart' show internal;
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/services.dart'
     show KeyDownEvent, KeyEvent, KeyRepeatEvent, LogicalKeyboardKey;
@@ -8,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../foundation/input.dart';
 import '../../foundation/modality.dart';
 import '../../l10n/localizations.dart';
+import '../../primitives/backdrop_group.dart';
 import '../../primitives/visual_scope.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/theme.dart';
@@ -16,6 +18,7 @@ import '../controls/buttons.dart';
 import '../controls/form_picker_trigger.dart';
 import '../controls/inputs.dart';
 import '../controls/multi_selection_draft.dart';
+import '../controls/selection_appearance.dart';
 import '../controls/selection_control.dart';
 import '../controls/selection_menu_row.dart';
 import '../controls/selection_option.dart';
@@ -101,7 +104,9 @@ class YumeiroBottomSheet extends StatelessWidget {
     this.maxHeight = double.infinity,
     this.minAnchoredHeight = 0,
     required this.child,
-  }) : _swipeToDismiss = false;
+  }) : _swipeToDismiss = false,
+       _headerActions = const [],
+       _pickerLayout = false;
 
   const YumeiroBottomSheet._selection({
     required this.title,
@@ -117,6 +122,26 @@ class YumeiroBottomSheet extends StatelessWidget {
        scrollable = false,
        contentPadding = null,
        maxWidth = 320,
+       maxHeight = double.infinity,
+       _headerActions = const [],
+       _pickerLayout = false;
+
+  const YumeiroBottomSheet._picker({
+    required this.title,
+    required this.anchor,
+    required this.maxWidth,
+    required this.minAnchoredHeight,
+    required this._headerActions,
+    required this._actions,
+    required this.child,
+  }) : _swipeToDismiss = false,
+       _pickerLayout = true,
+       headerAccessory = null,
+       showClose = true,
+       onClose = null,
+       canDismiss = true,
+       scrollable = true,
+       contentPadding = null,
        maxHeight = double.infinity;
 
   /// Presents custom content in a modal sheet route.
@@ -202,6 +227,8 @@ class YumeiroBottomSheet extends StatelessWidget {
   final double minAnchoredHeight;
 
   final List<Widget> _actions;
+  final List<Widget> _headerActions;
+  final bool _pickerLayout;
   final bool _swipeToDismiss;
   final bool showClose;
 
@@ -275,7 +302,11 @@ class YumeiroBottomSheet extends StatelessWidget {
                       child: YumeiroPageHeader.compact(
                         title: title,
                         namesRoute: true,
-                        actions: [if (actionInHeader) _actions.single, ?close],
+                        actions: [
+                          ..._headerActions,
+                          if (actionInHeader) _actions.single,
+                          ?close,
+                        ],
                       ),
                     ),
                   if (!sideActions && accessory != null)
@@ -298,6 +329,7 @@ class YumeiroBottomSheet extends StatelessWidget {
                   if (sideActions &&
                       (close != null ||
                           accessory != null ||
+                          _headerActions.isNotEmpty ||
                           _actions.isNotEmpty))
                     ConstrainedBox(
                       constraints: BoxConstraints(
@@ -307,18 +339,40 @@ class YumeiroBottomSheet extends StatelessWidget {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [?close, ?accessory, ..._actions],
+                          children: [
+                            ?close,
+                            ..._headerActions,
+                            ?accessory,
+                            ..._actions,
+                          ],
                         ),
                       ),
                     ),
                   if (!sideActions && !actionInHeader && _actions.isNotEmpty)
-                    YumeiroActionBar(
-                      showBackground: false,
-                      primaryAction: _actions.last,
-                      secondaryActions: _actions
-                          .take(_actions.length - 1)
-                          .toList(),
-                    ),
+                    if (_pickerLayout)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: inset,
+                          vertical: 8,
+                        ),
+                        child: YumeiroBackdropGroup(
+                          child: Row(
+                            spacing: theme.spacing.sm,
+                            children: [
+                              for (final action in _actions)
+                                Expanded(child: action),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      YumeiroActionBar(
+                        showBackground: false,
+                        primaryAction: _actions.last,
+                        secondaryActions: _actions
+                            .take(_actions.length - 1)
+                            .toList(),
+                      ),
                 ],
               ),
             );
@@ -353,6 +407,26 @@ class YumeiroBottomSheet extends StatelessWidget {
     );
   }
 }
+
+/// Builds a date or time picker with mode switches above its scrollable body.
+@internal
+YumeiroBottomSheet buildYumeiroPickerSheet({
+  required String title,
+  required double maxWidth,
+  required Rect? anchor,
+  required double minAnchoredHeight,
+  required List<Widget> headerActions,
+  required List<Widget> actions,
+  required Widget child,
+}) => YumeiroBottomSheet._picker(
+  title: title,
+  maxWidth: maxWidth,
+  anchor: anchor,
+  minAnchoredHeight: minAnchoredHeight,
+  headerActions: headerActions,
+  actions: actions,
+  child: child,
+);
 
 Rect? _selectionAnchor(BuildContext context, Rect? anchor) {
   if (anchor == null) return null;

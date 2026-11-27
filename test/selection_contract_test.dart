@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:yumeiro/src/components/controls/select_trigger.dart';
+import 'package:yumeiro/src/components/controls/selection_control.dart';
 import 'package:yumeiro/src/components/controls/selection_menu_row.dart';
 import 'package:yumeiro/src/components/overlays/picker_overlay.dart';
 import 'package:yumeiro/yumeiro.dart';
@@ -862,6 +863,12 @@ void main() {
         expect(locked.label, contains('Locked'));
         expect(locked.flagsCollection.isSelected, Tristate.isFalse);
         expect(locked.flagsCollection.isEnabled, Tristate.isFalse);
+        final unavailable = find.byType(UnavailableSelectionMark);
+        expect(unavailable, findsOneWidget);
+        expect(
+          tester.widget<UnavailableSelectionMark>(unavailable).selected,
+          isFalse,
+        );
       },
     );
   }

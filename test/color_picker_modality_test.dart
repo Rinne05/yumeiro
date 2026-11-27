@@ -3,6 +3,62 @@ import 'package:material_ui/material_ui.dart';
 import 'package:yumeiro/yumeiro.dart';
 
 void main() {
+  testWidgets('the spectrum markers use the active theme’s circular contour', (
+    tester,
+  ) async {
+    for (final (preset, pixel) in [
+      (YumeiroThemePresets.classicLight, false),
+      (YumeiroThemePresets.pixelDark, true),
+    ]) {
+      await tester.pumpWidget(
+        YumeiroApp(
+          key: ValueKey(preset),
+          preset: preset,
+          modality: YumeiroModality.pointer,
+          home: Scaffold(
+            body: Center(
+              child: YumeiroColorPickerButton(
+                value: const Color(0xFF408040),
+                defaultColor: Colors.blue,
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(YumeiroColorPickerButton));
+      await tester.pumpAndSettle();
+      for (final (key, radius) in [
+        ('yumeiro-color-saturation-value', 6.0),
+        ('yumeiro-color-hue', 5.0),
+      ]) {
+        final spectrum = find.descendant(
+          of: find.byKey(ValueKey(key)),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is CustomPaint && widget.painter != null,
+          ),
+        );
+        expect(spectrum, findsOneWidget);
+        if (pixel) {
+          expect(
+            spectrum,
+            paints
+              ..path()
+              ..path(color: Colors.white),
+          );
+          expect(spectrum, paintsExactlyCountTimes(#drawCircle, 0));
+        } else {
+          expect(
+            spectrum,
+            paints
+              ..circle(radius: radius + 2)
+              ..circle(radius: radius, color: Colors.white),
+          );
+        }
+      }
+    }
+  });
+
   testWidgets('pointer color picker anchors in RTL and avoids the keyboard', (
     tester,
   ) async {

@@ -12,7 +12,7 @@
 
 - <ApiLink symbol="YumeiroArtworkImage" /> 用于背景和封面。`loading` 在首帧准备时展示，缺少图片或解码失败时采用 `fallback` 或主题默认占位。
 - <ApiLink symbol="YumeiroArtworkImage.thumbnail" /> 为列表缩略图提供固定宽高。
-- <ApiLink symbol="YumeiroAvatar" /> 以圆形框展示头像，`radius` 控制大小。
+- <ApiLink symbol="YumeiroAvatar" /> 以圆形框展示头像，`radius` 控制大小。复古像素主题沿圆周绘制小阶梯，较大头像也保留圆形比例。
 
 由宿主构造 `ImageProvider` 并管理 URL、认证和解码尺寸。信息性图片可用 `semanticLabel` 提供替代文本。
 
@@ -32,4 +32,4 @@
 - <ApiLink symbol="YumeiroSectionHeader.eyebrow" /> 为分区标题添加强调色短标题。
 - <ApiLink symbol="YumeiroProgress" /> 接收 `0.0` 到 `1.0` 的进度，轨道端帽随主题变化。`YumeiroMediaCard.progress` 可直接接入同一读数。
 - <ApiLink symbol="YumeiroStarRating" /> 展示五分制半星评分，编辑用 <ApiLink symbol="YumeiroRatingEditor" />。
-- <ApiLink symbol="YumeiroMediaPlayButton" /> 为媒体封面提供播放入口，播放和暂停的状态由宿主管理。
+- <ApiLink symbol="YumeiroMediaPlayButton" /> 为媒体封面提供播放入口，播放和暂停的状态由宿主管理。复古像素主题使用与头像一致的阶梯圆形轮廓。

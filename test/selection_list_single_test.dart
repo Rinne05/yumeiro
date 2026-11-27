@@ -3,6 +3,7 @@ import 'dart:ui' show SemanticsRole;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:yumeiro/src/components/controls/selection_control.dart';
 import 'package:yumeiro/yumeiro.dart';
 
 const _options = [
@@ -38,6 +39,13 @@ Finder _group(String label) => find.ancestor(
   matching: find.byWidgetPredicate((widget) => widget is RadioGroup),
 );
 
+Finder _marksWithin(Finder rows) => find.descendant(
+  of: find.descendant(of: rows, matching: find.byType(SelectionControlMark)),
+  matching: find.byWidgetPredicate(
+    (widget) => widget is CustomPaint && widget.foregroundPainter != null,
+  ),
+);
+
 FocusNode _focusOf(WidgetTester tester, String label) =>
     tester.widget<RawRadio<Object?>>(_row(label)).focusNode;
 
@@ -60,6 +68,124 @@ Future<void> _press(WidgetTester tester, LogicalKeyboardKey key) async {
 }
 
 void main() {
+  testWidgets(
+    'inline option marks adapt to the theme and distinguish disabled choices',
+    (tester) async {
+      const disabledForeground = Color(0xff6a2c92);
+      final changes = <Set<String>>[];
+      Widget list(YumeiroThemePreset preset, {bool readOnly = false}) =>
+          YumeiroApp(
+            preset: preset,
+            modality: YumeiroModality.pointer,
+            home: Scaffold(
+              body: YumeiroVisualScope(
+                visualOverride: YumeiroVisualOverride(
+                  states: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.disabled)
+                        ? const YumeiroVisualDelta(
+                            foreground: disabledForeground,
+                          )
+                        : null,
+                  ),
+                ),
+                child: YumeiroSelectionList<String>(
+                  options: _options,
+                  values: const {'locked'},
+                  onChanged: changes.add,
+                  readOnly: readOnly,
+                  scrollable: false,
+                ),
+              ),
+            ),
+          );
+      Finder marksIn(String label) => _marksWithin(_row(label));
+
+      await tester.pumpWidget(list(YumeiroThemePresets.classicLight));
+      await tester.pumpAndSettle();
+      expect(marksIn('Alpha'), findsNothing);
+      expect(marksIn('Locked'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('Locked')).style?.color,
+        disabledForeground,
+      );
+
+      await tester.pumpWidget(list(YumeiroThemePresets.pixelDark));
+      await tester.pumpAndSettle();
+      for (final option in _options) {
+        expect(marksIn(option.label), findsOneWidget);
+      }
+      final locked = find.semantics.byLabel('Locked');
+      expect(
+        locked.evaluate().single,
+        isSemantics(
+          hasCheckedState: true,
+          isChecked: true,
+          hasEnabledState: true,
+          isEnabled: false,
+          isInMutuallyExclusiveGroup: true,
+          hasTapAction: false,
+        ),
+      );
+      await tester.tapAt(tester.getCenter(marksIn('Locked')));
+      await tester.pumpAndSettle();
+      expect(changes, isEmpty);
+
+      _focusOf(tester, 'Alpha').requestFocus();
+      await tester.pumpAndSettle();
+      await _press(tester, LogicalKeyboardKey.arrowDown);
+      expect(changes, [
+        {'beta'},
+      ]);
+
+      await tester.pumpWidget(
+        list(YumeiroThemePresets.classicLight, readOnly: true),
+      );
+      await tester.pumpAndSettle();
+      expect(marksIn('Locked'), findsNothing);
+    },
+  );
+
+  testWidgets('an explicit disabled option uses the shared checkbox mark', (
+    tester,
+  ) async {
+    final changes = <Set<String>>[];
+    await tester.pumpWidget(
+      _host(
+        Column(
+          children: [
+            YumeiroSelectionList<String>(
+              multiple: true,
+              options: _options,
+              values: const {'locked'},
+              onChanged: changes.add,
+              scrollable: false,
+            ),
+            const YumeiroSelectionRow(
+              title: Text('Disabled row'),
+              selected: false,
+              enabled: false,
+              onChanged: null,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      _marksWithin(find.byType(YumeiroSelectionList<String>)),
+      findsOneWidget,
+    );
+    expect(_marksWithin(find.byType(YumeiroSelectionRow)), findsOneWidget);
+
+    await tester.tapAt(tester.getCenter(find.text('Locked')));
+    await tester.pumpAndSettle();
+    expect(changes, isEmpty);
+    await tester.tap(find.text('Beta'));
+    expect(changes, [
+      {'locked', 'beta'},
+    ]);
+  });
+
   testWidgets(
     'single selection has one Tab stop and arrow keys skip disabled choices',
     (tester) async {

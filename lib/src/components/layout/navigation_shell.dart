@@ -10,6 +10,7 @@ import '../../theme/semantic_visuals.dart';
 import '../../theme/theme.dart';
 import '../../theme/theme_extension.dart';
 import '../../theme/visual_role.dart';
+import '../overlays/toast_obstruction.dart';
 import '../overlays/tooltip.dart';
 
 /// Labeled destination shared by the navigation bar, rail, and sidebar.
@@ -101,10 +102,12 @@ class YumeiroNavigationShell extends StatelessWidget {
               ),
           Expanded(key: const ValueKey('body'), child: body),
           if (showNavigation && useBottomBar)
-            _BottomNavBar(
-              destinations: destinations,
-              selectedIndex: selectedIndex,
-              onSelectedIndex: onSelectedIndex,
+            ToastBottomBar(
+              child: _BottomNavBar(
+                destinations: destinations,
+                selectedIndex: selectedIndex,
+                onSelectedIndex: onSelectedIndex,
+              ),
             ),
         ],
       ),

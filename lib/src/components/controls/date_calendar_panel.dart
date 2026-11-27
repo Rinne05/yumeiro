@@ -298,6 +298,8 @@ class _CalendarPickerPanelState<T extends Object>
   Widget build(BuildContext context) {
     final theme = YumeiroTheme.of(context);
     final messages = _messages;
+    final compactHeader =
+        !widget.touch && !widget.range && !_typing && _yearPickerMonth == null;
     final title = widget.range
         ? messages.dateRangePickerHelpText
         : messages.datePickerHelpText;
@@ -325,36 +327,57 @@ class _CalendarPickerPanelState<T extends Object>
       variant: YumeiroButtonVariant.primary,
       onPressed: _typing || _canConfirm ? _confirm : null,
     );
-    final body = _typing ? _inputFields() : _calendar();
+    final body = _typing
+        ? _inputFields()
+        : _calendar(modeToggle: compactHeader ? toggleMode : null);
     if (widget.touch) {
       final targetSize = YumeiroModalityScope.metricsOf(context).minTargetSize;
-      return YumeiroBottomSheet(
+      return buildYumeiroPickerSheet(
         maxWidth: widget.range ? 776 : 392,
         anchor: widget.anchor,
         minAnchoredHeight: _typing
             ? targetSize * (widget.range ? 6 : 4)
             : _dayHeight(context) * 6 + targetSize * (widget.range ? 4 : 3),
         title: title,
-        actions: [?toggleMode, cancel, confirm],
+        headerActions: [?toggleMode],
+        actions: [cancel, confirm],
         child: body,
       );
     }
-    return YumeiroScrollView(
-      padding: EdgeInsets.all(theme.spacing.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          YumeiroPageHeader.compact(
-            title: title,
-            namesRoute: true,
-            actions: [?toggleMode],
-          ),
-          Padding(padding: EdgeInsets.all(theme.spacing.sm), child: body),
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: Wrap(spacing: theme.spacing.sm, children: [cancel, confirm]),
-          ),
-        ],
+    return Semantics(
+      container: compactHeader,
+      namesRoute: compactHeader,
+      label: compactHeader ? title : null,
+      child: YumeiroScrollView(
+        padding: EdgeInsets.symmetric(horizontal: theme.spacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!compactHeader)
+              YumeiroPageHeader.compact(
+                title: title,
+                namesRoute: true,
+                actions: [?toggleMode],
+              ),
+            Padding(
+              padding: EdgeInsets.only(
+                top: compactHeader ? 0 : theme.spacing.xs,
+                bottom: theme.spacing.sm,
+              ),
+              child: body,
+            ),
+            const YumeiroDivider(),
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: theme.spacing.sm),
+              child: Wrap(
+                spacing: theme.spacing.sm,
+                runSpacing: theme.spacing.xs,
+                alignment: WrapAlignment.end,
+                children: [cancel, confirm],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -422,23 +445,24 @@ class _CalendarPickerPanelState<T extends Object>
 
   double _dayHeight(BuildContext context) {
     final theme = YumeiroTheme.of(context);
-    return math.max(
-      YumeiroModalityScope.metricsOf(context).denseTargetSize,
-      MediaQuery.textScalerOf(context)
-              .scale(theme.typography.body.fontSize ?? 14) +
-          theme.spacing.sm,
-    );
+    final metrics = YumeiroModalityScope.metricsOf(context);
+    final style = theme.typography.control(monospace: true);
+    final lineHeight =
+        MediaQuery.textScalerOf(context).scale(style.fontSize!) *
+        (style.height ?? 1.2);
+    return math.max(metrics.minTargetSize, lineHeight + theme.spacing.sm);
   }
 
-  Widget _calendar() => LayoutBuilder(
+  Widget _calendar({Widget? modeToggle}) => LayoutBuilder(
     builder: (context, constraints) {
       final theme = YumeiroTheme.of(context);
       final spacing = theme.spacing;
       final dayHeight = _dayHeight(context);
+      final monthGap = spacing.md + spacing.xs;
       final doubleMonth =
           widget.range &&
           _firstMonth != _lastMonth &&
-          constraints.maxWidth >= 14 * dayHeight + spacing.md;
+          constraints.maxWidth >= 14 * dayHeight + monthGap;
       final first = doubleMonth && _month == _lastMonth
           ? DateUtils.addMonthsToMonthDate(_month, -1)
           : _month;
@@ -463,7 +487,7 @@ class _CalendarPickerPanelState<T extends Object>
           else
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: spacing.md,
+              spacing: monthGap,
               children: [
                 Expanded(
                   child: _monthGrid(
@@ -474,6 +498,7 @@ class _CalendarPickerPanelState<T extends Object>
                     next: !doubleMonth,
                     canPrevious: first != _firstMonth,
                     canNext: last != _lastMonth,
+                    modeToggle: modeToggle,
                   ),
                 ),
                 if (doubleMonth)
@@ -509,14 +534,28 @@ class _CalendarPickerPanelState<T extends Object>
 
   Widget _rangeSummary() {
     final theme = YumeiroTheme.of(context);
+    final inset = theme.visuals.surface(YumeiroSurfaceRole.inset);
+    final accent = theme.visuals.status(YumeiroStatusRole.accent);
+    final inherited = YumeiroVisualScope.maybeOf(context)?.visualOverride;
+    final targetSize = YumeiroModalityScope.metricsOf(context).minTargetSize;
     Widget endpoint(String label, DateTime? value, _RangeTarget target) {
+      final active =
+          _target == target ||
+          (_target == _RangeTarget.newStart && target == _RangeTarget.start);
       return Expanded(
         child: YumeiroInteractiveVisualSurface(
           role: YumeiroControlRole.neutral,
-          selected:
-              _target == target ||
-              (_target == _RangeTarget.newStart &&
-                  target == _RangeTarget.start),
+          selected: active,
+          visualOverride: _CalendarEndpointAppearance(
+            inset,
+            active
+                ? BorderSide(
+                    color: accent.foreground,
+                    width: math.max(1.0, inset.outline.width),
+                  )
+                : inset.outline,
+            inherited,
+          ),
           onTap: () => _editRangeEndpoint(target),
           padding: EdgeInsets.symmetric(
             horizontal: theme.spacing.sm,
@@ -525,20 +564,28 @@ class _CalendarPickerPanelState<T extends Object>
           child: Builder(
             builder: (context) {
               final foreground = DefaultTextStyle.of(context).style.color;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: theme.typography.caption.copyWith(color: foreground),
-                  ),
-                  Text(
-                    value == null
-                        ? _messages.unspecifiedDate
-                        : _messages.formatCompactDate(value),
-                    style: theme.typography.body.copyWith(color: foreground),
-                  ),
-                ],
+              return ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: math.max(0, targetSize - 2 * theme.spacing.xs),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: theme.typography.caption.copyWith(
+                        color: foreground,
+                      ),
+                    ),
+                    Text(
+                      value == null
+                          ? _messages.unspecifiedDate
+                          : _messages.formatCompactDate(value),
+                      style: theme.typography.body.copyWith(color: foreground),
+                    ),
+                  ],
+                ),
               );
             },
           ),
@@ -566,9 +613,13 @@ class _CalendarPickerPanelState<T extends Object>
     required bool next,
     required bool canPrevious,
     required bool canNext,
+    Widget? modeToggle,
   }) {
     final theme = YumeiroTheme.of(context);
-    final targetSize = YumeiroModalityScope.metricsOf(context).denseTargetSize;
+    final metrics = YumeiroModalityScope.metricsOf(context);
+    final targetSize = metrics.minTargetSize;
+    final columnGap = widget.touch || widget.range ? 0.0 : theme.spacing.xs;
+    final rowGap = widget.touch ? 0.0 : theme.spacing.xs / 2;
     final daysInMonth = DateUtils.getDaysInMonth(month.year, month.month);
     final firstDayOffset = DateUtils.firstDayOffset(
       month.year,
@@ -589,7 +640,6 @@ class _CalendarPickerPanelState<T extends Object>
               ? _messages.nextMonthTooltip
               : _messages.previousMonthTooltip,
           variant: YumeiroButtonVariant.ghost,
-          dense: true,
           onPressed: enabled
               ? () {
                   // Both calendars move by one month. The next arrow lives on the later grid.
@@ -603,44 +653,35 @@ class _CalendarPickerPanelState<T extends Object>
               : null,
         );
 
-    return Column(
+    final monthTitle = YumeiroButton(
+      label: _messages.formatMonthYear(month),
+      tooltip: _messages.selectYearSemanticsLabel,
+      trailingIcon: theme.icons.chevronDown,
+      variant: YumeiroButtonVariant.ghost,
+      onPressed: () => setState(() => _yearPickerMonth = month),
+    );
+    final days = Column(
       children: [
         Row(
-          children: [
-            if (previous)
-              arrow(forward: false, enabled: canPrevious)
-            else
-              SizedBox(width: targetSize),
-            Expanded(
-              child: YumeiroButton(
-                label: _messages.formatMonthYear(month),
-                tooltip: _messages.selectYearSemanticsLabel,
-                trailingIcon: theme.icons.chevronDown,
-                variant: YumeiroButtonVariant.ghost,
-                dense: true,
-                onPressed: () => setState(() => _yearPickerMonth = month),
-              ),
-            ),
-            if (next)
-              arrow(forward: true, enabled: canNext)
-            else
-              SizedBox(width: targetSize),
-          ],
-        ),
-        Row(
+          spacing: columnGap,
           children: [
             for (var i = 0; i < weekdayCount; i++)
               Expanded(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: theme.spacing.xs),
-                  child: ExcludeSemantics(
-                    child: Text(
-                      _messages.narrowWeekdays[(_messages.firstDayOfWeekIndex +
-                              i) %
-                          weekdayCount],
-                      textAlign: TextAlign.center,
-                      style: theme.typography.caption.copyWith(
-                        color: theme.muted,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: widget.touch ? 28 : 24,
+                  ),
+                  child: Center(
+                    child: ExcludeSemantics(
+                      child: Text(
+                        _messages.narrowWeekdays[(_messages
+                                    .firstDayOfWeekIndex +
+                                i) %
+                            weekdayCount],
+                        textAlign: TextAlign.center,
+                        style: theme.typography.caption.copyWith(
+                          color: theme.muted,
+                        ),
                       ),
                     ),
                   ),
@@ -650,9 +691,11 @@ class _CalendarPickerPanelState<T extends Object>
         ),
         Column(
           key: ValueKey('yumeiro-calendar-month-${month.year}-${month.month}'),
+          spacing: rowGap,
           children: [
             for (var week = 0; week < 6; week++)
               Row(
+                spacing: columnGap,
                 children: [
                   for (var col = 0; col < weekdayCount; col++)
                     Expanded(
@@ -670,6 +713,56 @@ class _CalendarPickerPanelState<T extends Object>
               ),
           ],
         ),
+      ],
+    );
+    final actionGap = widget.touch ? 0.0 : theme.spacing.xs;
+    return Column(
+      children: [
+        if (widget.range)
+          Row(
+            children: [
+              if (previous)
+                arrow(forward: false, enabled: canPrevious)
+              else
+                SizedBox(width: targetSize),
+              Expanded(child: monthTitle),
+              if (next)
+                arrow(forward: true, enabled: canNext)
+              else
+                SizedBox(width: targetSize),
+            ],
+          )
+        else ...[
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: metrics.minTargetSize),
+            child: YumeiroSettingRowHeader(
+              title: monthTitle,
+              spacing: actionGap,
+              runSpacing: theme.spacing.xs,
+              trailing: Wrap(
+                spacing: actionGap,
+                runSpacing: theme.spacing.xs,
+                alignment: WrapAlignment.end,
+                children: [
+                  arrow(forward: false, enabled: canPrevious),
+                  arrow(forward: true, enabled: canNext),
+                  ?modeToggle,
+                ],
+              ),
+            ),
+          ),
+          if (!widget.touch) const YumeiroDivider(),
+        ],
+        if (widget.range || widget.touch)
+          days
+        else
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth:
+                  weekdayCount * targetSize + (weekdayCount - 1) * columnGap,
+            ),
+            child: days,
+          ),
       ],
     );
   }
@@ -749,7 +842,6 @@ class _CalendarPickerPanelState<T extends Object>
           tooltip: _messages.calendarModeButtonLabel,
           trailingIcon: theme.icons.chevronUp,
           variant: YumeiroButtonVariant.ghost,
-          dense: true,
           onPressed: () => setState(() => _yearPickerMonth = null),
         ),
         SizedBox(
@@ -767,6 +859,29 @@ class _CalendarPickerPanelState<T extends Object>
         ),
       ],
     );
+  }
+}
+
+class _CalendarEndpointAppearance extends YumeiroVisualOverride {
+  const _CalendarEndpointAppearance(this.inset, this.outline, this.inherited);
+
+  final YumeiroVisualAppearance inset;
+  final BorderSide outline;
+  final YumeiroVisualOverride? inherited;
+
+  @override
+  YumeiroVisualAppearance apply(
+    YumeiroVisualAppearance appearance,
+    Set<WidgetState> widgetStates,
+  ) {
+    final resolved = appearance.copyWith(
+      fill: inset.fill,
+      foreground: inset.foreground,
+      shape: inset.shape,
+      outline: outline,
+      effects: inset.effects,
+    );
+    return inherited?.apply(resolved, widgetStates) ?? resolved;
   }
 }
 
@@ -851,12 +966,18 @@ class _CalendarDayCellState extends State<_CalendarDayCell> {
           builder: (context) {
             final foreground =
                 DefaultTextStyle.of(context).style.color ?? theme.text;
-            final style = theme.typography.mono(
-              fontWeight: widget.selected
-                  ? theme.typography.emphasisWeight
-                  : null,
-              color: foreground,
-            );
+            final tint = widget.selected || widget.onTap == null
+                ? foreground
+                : accent.foreground;
+            final style = theme.typography
+                .control(monospace: true)
+                .copyWith(
+                  fontWeight:
+                      widget.selected || (widget.today && widget.onTap != null)
+                      ? theme.typography.emphasisWeight
+                      : null,
+                  color: widget.today ? tint : foreground,
+                );
             final label = Center(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
@@ -868,20 +989,14 @@ class _CalendarDayCellState extends State<_CalendarDayCell> {
             final shape = theme.visuals
                 .surface(YumeiroSurfaceRole.compact)
                 .shape;
+            final side = BorderSide(color: tint, width: 1.5);
             final markerShape = switch (shape) {
               RoundedRectangleBorder(:final borderRadius) => shape.copyWith(
                 borderRadius: borderRadius * 2,
-                side: BorderSide.none,
+                side: side,
               ),
-              _ => shape.copyWith(side: BorderSide.none),
+              _ => shape.copyWith(side: side),
             };
-            final tint = widget.selected ? foreground : accent.foreground;
-            final marker = ShapeDecoration(
-              // A second tone identifies today over either the range band or
-              // the selected day surface.
-              color: tint.withValues(alpha: tint.a * .18),
-              shape: markerShape,
-            );
             final painter = TextPainter(
               text: TextSpan(text: widget.text, style: style),
               textDirection: Directionality.of(context),
@@ -906,14 +1021,14 @@ class _CalendarDayCellState extends State<_CalendarDayCell> {
                     available,
                     math.max(
                       metrics.denseChipHeight,
-                      labelExtent + theme.spacing.xs,
+                      labelExtent + theme.spacing.sm,
                     ),
                   );
                   return SizedBox.square(
                     dimension: diameter,
                     child: DecoratedBox(
                       key: const ValueKey('yumeiro-calendar-today-marker'),
-                      decoration: marker,
+                      decoration: ShapeDecoration(shape: markerShape),
                       child: label,
                     ),
                   );
@@ -998,6 +1113,7 @@ class _CalendarYearGridState extends State<_CalendarYearGrid> {
   @override
   Widget build(BuildContext context) {
     final messages = MaterialLocalizations.of(context);
+    final fontSize = YumeiroTheme.of(context).typography.caption.fontSize;
     return Semantics(
       label: messages.selectYearSemanticsLabel,
       child: GridView.builder(
@@ -1015,7 +1131,7 @@ class _CalendarYearGridState extends State<_CalendarYearGrid> {
             monospace: true,
             selected: year == widget.currentYear,
             variant: YumeiroButtonVariant.ghost,
-            dense: true,
+            fontSize: fontSize,
             onPressed: () => widget.onSelected(year),
           );
         },

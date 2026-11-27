@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:yumeiro/src/components/controls/selection_control.dart';
 import 'package:yumeiro/yumeiro.dart';
 
 void main() {
@@ -62,6 +63,90 @@ void main() {
       semantics.dispose();
     });
   }
+
+  testWidgets('disabled single rows retain selection and independent actions', (
+    tester,
+  ) async {
+    const disabled = ValueKey('disabled');
+    const readOnly = ValueKey('read-only');
+    const customForeground = Color(0xff682ba0);
+    var selected = 0;
+    var opened = 0;
+    await tester.pumpWidget(
+      _host(
+        modality: YumeiroModality.pointer,
+        child: Column(
+          children: [
+            YumeiroVisualScope(
+              visualOverride: YumeiroVisualOverride(
+                states: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? const YumeiroVisualDelta(foreground: customForeground)
+                      : null,
+                ),
+              ),
+              child: YumeiroSelectionRow(
+                key: disabled,
+                title: const Text('Locked choice'),
+                multiple: false,
+                enabled: false,
+                selected: true,
+                trailing: YumeiroButton(
+                  label: 'Details',
+                  onPressed: () => opened++,
+                ),
+                onChanged: (_) => selected++,
+              ),
+            ),
+            const YumeiroSelectionRow(
+              key: readOnly,
+              title: Text('Saved choice'),
+              multiple: false,
+              readOnly: true,
+              selected: true,
+              onChanged: null,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final mark = find.byType(UnavailableSelectionMark);
+    expect(mark, findsOneWidget);
+    expect(tester.widget<UnavailableSelectionMark>(mark).selected, isTrue);
+    final surface = find.descendant(
+      of: find.byKey(disabled),
+      matching: find.byType(YumeiroResolvedVisualSurface),
+    );
+    final appearance = tester
+        .widget<YumeiroResolvedVisualSurface>(surface.first)
+        .appearance;
+    expect(appearance.foreground, customForeground);
+    expect(appearance.opacity, 1);
+    final checkmark = YumeiroTheme.of(tester.element(find.byKey(readOnly)))
+        .icons
+        .check;
+    expect(
+      find.descendant(
+        of: find.byKey(readOnly),
+        matching: find.byIcon(checkmark),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSemantics(find.byKey(disabled)),
+      isSemantics(
+        isSelected: true,
+        hasEnabledState: true,
+        isEnabled: false,
+        hasTapAction: false,
+      ),
+    );
+    await tester.tap(find.text('Locked choice'));
+    await tester.tap(find.text('Details'));
+    expect(selected, 0);
+    expect(opened, 1);
+  });
 
   for (final direction in TextDirection.values) {
     testWidgets('row footer follows its text column in ${direction.name}', (

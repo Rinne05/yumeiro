@@ -495,7 +495,7 @@ class _SelectionListDemoState extends State<_SelectionListDemo> {
               'YumeiroSelectionList(multiple: true)',
               YumeiroSelectionList<String>(
                 label: chinese ? '多选' : 'Multiple choices',
-                options: options(),
+                options: options(disableC: true),
                 values: _multiple,
                 onChanged: (values) => setState(() => _multiple = values),
                 multiple: true,

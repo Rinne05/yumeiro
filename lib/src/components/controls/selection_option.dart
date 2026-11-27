@@ -17,6 +17,9 @@ class YumeiroSelectionOption<T> {
   final String? subtitle;
   final IconData? icon;
   final IconData? trailingIcon;
+
+  /// Whether the user can select this option. Existing selected values may
+  /// still include it. Selection indicators mark unavailable options with a slash.
   final bool enabled;
 
   @override

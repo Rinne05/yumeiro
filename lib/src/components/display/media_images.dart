@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import '../../foundation/modality.dart';
 import '../../l10n/localizations.dart';
 import '../../primitives/pixel_border.dart';
+import '../../primitives/pixel_circle.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/semantic_visuals.dart';
 import '../../theme/theme.dart';
@@ -153,17 +154,23 @@ class YumeiroAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = YumeiroTheme.of(context);
+    final diameter = radius * 2;
+    final artwork = YumeiroArtworkImage(
+      image: image,
+      fallback:
+          fallback ??
+          Icon(theme.icons.person, size: radius, color: theme.muted),
+      semanticLabel: semanticLabel,
+    );
     return SizedBox.square(
-      dimension: radius * 2,
-      child: ClipOval(
-        child: YumeiroArtworkImage(
-          image: image,
-          fallback:
-              fallback ??
-              Icon(theme.icons.person, size: radius, color: theme.muted),
-          semanticLabel: semanticLabel,
-        ),
-      ),
+      dimension: diameter,
+      child: theme.checkboxVisuals.shape is YumeiroPixelBorder
+          ? ClipPath(
+              clipper: ShapeBorderClipper(shape: pixelCircleBorder(diameter)),
+              clipBehavior: Clip.hardEdge,
+              child: artwork,
+            )
+          : ClipOval(child: artwork),
     );
   }
 }

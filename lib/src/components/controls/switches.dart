@@ -4,7 +4,10 @@ import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
+import '../../foundation/color_math.dart';
 import '../../foundation/modality.dart';
+import '../../primitives/pixel_border.dart';
+import '../../primitives/selection_marks.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/theme.dart';
 import 'boolean_form_fields.dart';
@@ -73,7 +76,8 @@ class YumeiroSwitch extends StatefulWidget {
   /// Current on/off value, controlled by the caller.
   final bool value;
 
-  /// Requests a new on/off value. Null leaves the switch disabled.
+  /// Requests a new on/off value. Null disables the switch and marks its
+  /// thumb with a slash while retaining its current position.
   final ValueChanged<bool>? onChanged;
   final String? semanticLabel;
   final FocusNode? focusNode;
@@ -126,6 +130,14 @@ class _YumeiroSwitchState extends State<YumeiroSwitch> {
 
     final trackAppearance = visuals.track.resolve(states);
     final thumbAppearance = visuals.thumb.resolve(states);
+    final markColor = !_enabled
+        ? unavailableMarkInk(
+            yumeiroAlphaBlend(
+              thumbAppearance.background,
+              yumeiroAlphaBlend(trackAppearance.background, theme.surface),
+            ),
+          )
+        : null;
     final trackSize = visuals.trackSize;
     final thumbSize = visuals.thumbSize;
     final inset = (trackSize.height - thumbSize) / 2;
@@ -157,9 +169,17 @@ class _YumeiroSwitchState extends State<YumeiroSwitch> {
               height: thumbSize,
               child: child!,
             ),
-            child: YumeiroResolvedVisualSurface(
-              appearance: thumbAppearance,
-              child: const SizedBox.expand(),
+            child: CustomPaint(
+              foregroundPainter: markColor == null
+                  ? null
+                  : UnavailableSlashPainter(
+                      color: markColor,
+                      pixel: thumbAppearance.shape is YumeiroPixelBorder,
+                    ),
+              child: YumeiroResolvedVisualSurface(
+                appearance: thumbAppearance,
+                child: const SizedBox.expand(),
+              ),
             ),
           ),
         ],
@@ -178,7 +198,7 @@ class _YumeiroSwitchState extends State<YumeiroSwitch> {
       toggled: widget.value,
       enabled: _enabled,
       focusable: _enabled,
-      focused: _focused,
+      focused: _enabled && _focused,
       onTap: _enabled ? _toggle : null,
       excludeSemantics: true,
       child: FocusableActionDetector(

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../foundation/modality.dart';
 import '../../foundation/typography.dart';
+import '../../primitives/visual_scope.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/semantic_visuals.dart';
 import '../../theme/theme.dart';
@@ -12,6 +13,8 @@ import '../../theme/visual_role.dart';
 import '../layout/list_tile.dart';
 import '../layout/row_visuals.dart';
 import '../overlays/tooltip.dart';
+import 'selection_appearance.dart';
+import 'selection_control.dart';
 
 /// Selectable value and presentation for a segmented control.
 ///
@@ -41,6 +44,9 @@ class YumeiroSegmentOption<T> {
   /// Custom content replacing the icon in a vertical segment.
   final Widget? leading;
   final String? tooltip;
+
+  /// Whether this option can be chosen. An unavailable option keeps its
+  /// existing selection and shows a status marker in an interactive group.
   final bool enabled;
 }
 
@@ -181,6 +187,27 @@ class YumeiroSegmentedControl<T> extends StatelessWidget {
   ) {
     final selected = option.value == value;
     final enabled = onChanged != null && option.enabled;
+    final unavailable = onChanged != null && !option.enabled;
+    final label = Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (option.icon != null) Icon(option.icon, size: iconSize),
+        if (option.icon != null && option.label != null)
+          const SizedBox(width: 6),
+        if (option.label != null)
+          Flexible(
+            child: YumeiroTextStyle(
+              style: theme.typography.control(selected: selected, dense: dense),
+              child: Text(
+                option.label!,
+                maxLines: expand ? null : 1,
+                overflow: expand ? null : TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+      ],
+    );
 
     Widget item = Semantics(
       button: true,
@@ -193,6 +220,11 @@ class YumeiroSegmentedControl<T> extends StatelessWidget {
         selected: selected,
         visualOverride: onChanged == null
             ? const YumeiroVisualOverride(base: YumeiroVisualDelta(opacity: 1))
+            : unavailable
+            ? unavailableSelectionVisualOverride(
+                context,
+                YumeiroItemRole.selection,
+              )
             : null,
         visualInsets: EdgeInsets.symmetric(
           horizontal: 3,
@@ -208,29 +240,21 @@ class YumeiroSegmentedControl<T> extends StatelessWidget {
             padding: EdgeInsets.symmetric(
               vertical: metrics.isTouch ? (dense ? 6 : 10) : (dense ? 3 : 6),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (option.icon != null) Icon(option.icon, size: iconSize),
-                if (option.icon != null && option.label != null)
-                  const SizedBox(width: 6),
-                if (option.label != null)
-                  Flexible(
-                    child: YumeiroTextStyle(
-                      style: theme.typography.control(
+            child: unavailable
+                ? Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: theme.spacing.xs,
+                    runSpacing: theme.spacing.xs,
+                    children: [
+                      label,
+                      UnavailableSelectionMark(
                         selected: selected,
-                        dense: dense,
+                        size: theme.iconSizes.sm,
                       ),
-                      child: Text(
-                        option.label!,
-                        maxLines: expand ? null : 1,
-                        overflow: expand ? null : TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+                    ],
+                  )
+                : label,
           ),
         ),
       ),
@@ -260,6 +284,18 @@ class _VerticalSegmentedControl<T> extends StatelessWidget {
   final bool dense;
   final bool showCheckmark;
 
+  Widget _marker(YumeiroSegmentOption<T> option, IconData check, double size) {
+    final selected = option.value == value;
+    return SizedBox.square(
+      dimension: size,
+      child: onChanged != null && !option.enabled
+          ? UnavailableSelectionMark(selected: selected, size: size)
+          : showCheckmark && selected
+          ? Icon(check, size: size)
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = YumeiroTheme.of(context);
@@ -272,6 +308,22 @@ class _VerticalSegmentedControl<T> extends StatelessWidget {
           );
     final touchRowInset = rowVisualInsets(context, metrics: touchMetrics).left;
     final frameGap = math.max(3.0, touchRowInset);
+    final reservesMarker =
+        showCheckmark ||
+        (onChanged != null && options.any((option) => !option.enabled));
+
+    Widget buildOption(YumeiroSegmentOption<T> option) {
+      final marker = reservesMarker
+          ? _marker(
+              option,
+              theme.icons.check,
+              metrics.isTouch ? 24 : theme.iconSizes.sm,
+            )
+          : null;
+      return metrics.isTouch
+          ? _buildTouchOption(context, option, marker)
+          : _buildOption(context, option, theme, metrics, marker);
+    }
 
     return YumeiroVisualSurface(
       role: YumeiroControlRole.secondary,
@@ -281,12 +333,7 @@ class _VerticalSegmentedControl<T> extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final option in options)
-            metrics.isTouch
-                ? _buildTouchOption(context, option, theme)
-                : _buildOption(context, option, theme, metrics),
-        ],
+        children: [for (final option in options) buildOption(option)],
       ),
     );
   }
@@ -294,33 +341,59 @@ class _VerticalSegmentedControl<T> extends StatelessWidget {
   Widget _buildTouchOption(
     BuildContext context,
     YumeiroSegmentOption<T> option,
-    YumeiroThemeExtension theme,
+    Widget? marker,
   ) {
     final selected = option.value == value;
     final enabled = onChanged != null && option.enabled;
+    final unavailable = onChanged != null && !option.enabled;
     final label = option.label;
+    final scope = YumeiroVisualScope.maybeOf(context);
+    final override = unavailable
+        ? unavailableSelectionVisualOverride(context, YumeiroItemRole.selection)
+        : null;
+    final labelStyle = override == null || selected
+        ? null
+        : TextStyle(
+            color: YumeiroTheme.of(context).visuals.item(
+              scope?.itemRole ?? YumeiroItemRole.selection,
+              {WidgetState.disabled},
+              override,
+            ).foreground,
+          );
+
+    Widget visualScope(Widget child, {YumeiroVisualOverride? override}) =>
+        YumeiroVisualScope(
+          surfaceRole: scope?.surfaceRole,
+          controlRole: scope?.controlRole,
+          itemRole: scope?.itemRole,
+          visualOverride: override ?? scope?.visualOverride,
+          child: child,
+        );
+
     final Widget tile = Semantics(
       inMutuallyExclusiveGroup: true,
       label: label == null ? option.tooltip : null,
-      child: YumeiroListTile(
-        showChevron: false,
-        role: YumeiroItemRole.selection,
-        title: label == null ? const SizedBox.shrink() : Text(label),
-        subtitle: option.subtitle == null || option.subtitle!.isEmpty
-            ? null
-            : Text(option.subtitle!),
-        leading:
-            option.leading ??
-            (option.icon == null ? null : Icon(option.icon, size: 24)),
-        trailing: showCheckmark
-            ? (selected
-                  ? Icon(theme.icons.check, size: 24)
-                  : const SizedBox(width: 24))
-            : null,
-        selected: selected,
-        enabled: enabled,
-        dense: dense,
-        onTap: enabled ? () => onChanged!(option.value) : null,
+      child: visualScope(
+        YumeiroListTile(
+          showChevron: false,
+          role: YumeiroItemRole.selection,
+          title: label == null
+              ? const SizedBox.shrink()
+              : Text(label, style: labelStyle),
+          subtitle: option.subtitle == null || option.subtitle!.isEmpty
+              ? null
+              : Text(option.subtitle!, style: labelStyle),
+          leading: switch (option.leading) {
+            final leading? => visualScope(leading),
+            null => option.icon == null ? null : Icon(option.icon, size: 24),
+          },
+          trailing: marker,
+          selected: selected,
+          enabled: enabled,
+          dense: dense,
+          onTap: enabled ? () => onChanged!(option.value) : null,
+        ),
+        override: override,
       ),
     );
     return option.tooltip == null || option.tooltip!.isEmpty
@@ -337,9 +410,11 @@ class _VerticalSegmentedControl<T> extends StatelessWidget {
     YumeiroSegmentOption<T> option,
     YumeiroThemeExtension theme,
     YumeiroMetrics metrics,
+    Widget? trailing,
   ) {
     final selected = option.value == value;
     final enabled = onChanged != null && option.enabled;
+    final unavailable = onChanged != null && !option.enabled;
     final label = option.label;
     final subtitle = option.subtitle;
     final titleStyle = theme.typography.control(
@@ -351,15 +426,6 @@ class _VerticalSegmentedControl<T> extends StatelessWidget {
     final leadingIcon = option.icon == null
         ? null
         : Icon(option.icon, size: theme.iconSizes.sm);
-    final trailing = showCheckmark
-        ? SizedBox.square(
-            dimension: theme.iconSizes.sm,
-            child: selected
-                ? Icon(theme.icons.check, size: theme.iconSizes.sm)
-                : null,
-          )
-        : null;
-
     final optionMinHeight =
         (dense ? metrics.denseControlHeight : metrics.controlHeight) - 6;
 
@@ -420,6 +486,12 @@ class _VerticalSegmentedControl<T> extends StatelessWidget {
       role: YumeiroItemRole.selection,
       selected: selected,
       onTap: enabled ? () => onChanged!(option.value) : null,
+      visualOverride: unavailable
+          ? unavailableSelectionVisualOverride(
+              context,
+              YumeiroItemRole.selection,
+            )
+          : null,
       child: content,
     );
     final name = label ?? option.tooltip;

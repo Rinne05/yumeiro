@@ -4,11 +4,16 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../foundation/modality.dart';
+import '../../primitives/visual_scope.dart';
 import '../../primitives/visual_surface.dart';
+import '../../theme/effect_pass.dart';
+import '../../theme/semantic_visuals.dart';
 import '../../theme/theme.dart';
 import '../../theme/visual_role.dart';
 import '../layout/page_header.dart';
+import '../layout/panels.dart';
 import '../layout/scroll_view.dart';
+import '../layout/setting_row_header.dart';
 import '../overlays/picker_overlay.dart';
 import '../overlays/sheets.dart';
 import 'buttons.dart';
@@ -153,9 +158,9 @@ class YumeiroDatePicker extends _DateTimePicker<DateTime> {
     return _showDateTimePanel<DateTime>(
       context,
       useRootNavigator: useRootNavigator,
-      width: 392,
+      width: _calendarPanelWidth(context, range: false),
       maxHeight: 560,
-      preferredHeight: 410,
+      preferredHeight: 400,
       panel: (presentation) => _CalendarPickerPanel<DateTime>(
         initialDate: initialDate,
         firstDate: firstDate,
@@ -291,9 +296,9 @@ class YumeiroTimePicker extends _DateTimePicker<TimeOfDay> {
       _showDateTimePanel<TimeOfDay>(
         context,
         useRootNavigator: useRootNavigator,
-        width: 320,
+        width: 264,
         maxHeight: 540,
-        preferredHeight: 400,
+        preferredHeight: 420,
         panel: (presentation) => _TimePickerPanel(
           initialTime: value ?? initialPickerTime ?? TimeOfDay.now(),
           initialEntryMode: initialEntryMode,
@@ -448,7 +453,7 @@ class YumeiroDateRangePicker extends _DateTimePicker<DateTimeRange<DateTime>> {
   ) => _showDateTimePanel<DateTimeRange<DateTime>>(
     context,
     useRootNavigator: useRootNavigator,
-    width: 720,
+    width: _calendarPanelWidth(context, range: true),
     maxHeight: 640,
     preferredHeight: 470,
     panel: (presentation) => _CalendarPickerPanel<DateTimeRange<DateTime>>(
@@ -731,6 +736,24 @@ typedef _DateTimePresentation = ({
   bool alwaysUse24HourFormat,
 });
 
+double _calendarPanelWidth(BuildContext context, {required bool range}) {
+  final spacing = YumeiroTheme.of(context).spacing;
+  final targetSize = YumeiroModalityScope.metricsOf(context).minTargetSize;
+  final monthWidth = DateTime.daysPerWeek * targetSize;
+  final horizontalPadding = spacing.md * 2;
+  return range
+      ? math.max(
+          616,
+          2 * monthWidth + horizontalPadding + spacing.md + spacing.xs,
+        )
+      : math.max(
+          312,
+          monthWidth +
+              horizontalPadding +
+              (DateTime.daysPerWeek - 1) * spacing.xs,
+        );
+}
+
 Future<T?> _showDateTimePanel<T>(
   BuildContext context, {
   required bool useRootNavigator,
@@ -776,5 +799,6 @@ Future<T?> _showDateTimePanel<T>(
     width: width,
     maxHeight: maxHeight,
     minHeight: preferredHeight,
+    surfacePadding: EdgeInsets.zero,
   );
 }

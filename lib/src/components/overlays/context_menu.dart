@@ -9,9 +9,12 @@ import '../../foundation/modality.dart';
 import '../../scope/captured_configuration.dart';
 import '../../l10n/localizations.dart';
 import '../../primitives/glass_backdrop.dart';
+import '../../primitives/visual_scope.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/theme.dart';
 import '../../theme/visual_role.dart';
+import '../controls/selection_appearance.dart';
+import '../controls/selection_control.dart';
 import '../layout/list_tile.dart';
 import 'dialogs.dart' show YumeiroSheetController;
 import 'menu_actions.dart';
@@ -362,6 +365,17 @@ Widget _actionIconSlot(IconData? icon, double size) => SizedBox.square(
   child: icon == null ? null : ExcludeSemantics(child: Icon(icon, size: size)),
 );
 
+bool _showsDisabledSelection(YumeiroMenuAction action) =>
+    action.selected != null && !action.enabled;
+
+Widget _actionSelectionSlot(
+  YumeiroMenuAction action,
+  IconData checkmark,
+  double size,
+) => _showsDisabledSelection(action)
+    ? UnavailableSelectionMark(size: size, selected: action.selected == true)
+    : _actionIconSlot(action.selected == true ? checkmark : null, size);
+
 class _SheetMenuItems extends StatelessWidget {
   const _SheetMenuItems({required this.items});
 
@@ -417,20 +431,18 @@ class _SheetMenuItems extends StatelessWidget {
     final theme = YumeiroTheme.of(context);
     final iconSize = theme.iconSizes.md;
     final onPressed = yumeiroMenuActionCallback(action);
-    return YumeiroListTile(
+    final role = action.destructive
+        ? YumeiroItemRole.danger
+        : YumeiroItemRole.standard;
+    final tile = YumeiroListTile(
       leading: hasIcons ? _actionIconSlot(action.icon, iconSize) : null,
       trailing: hasSelection
-          ? _actionIconSlot(
-              action.selected == true ? theme.icons.check : null,
-              iconSize,
-            )
+          ? _actionSelectionSlot(action, theme.icons.check, iconSize)
           : null,
       title: Text(action.label),
       padding: EdgeInsets.all(theme.spacing.md),
       showChevron: false,
-      role: action.destructive
-          ? YumeiroItemRole.danger
-          : YumeiroItemRole.standard,
+      role: role,
       enabled: onPressed != null,
       selected: action.selected,
       onTap: onPressed == null
@@ -439,6 +451,15 @@ class _SheetMenuItems extends StatelessWidget {
               Navigator.of(context).pop();
               onPressed();
             },
+    );
+    if (!_showsDisabledSelection(action)) return tile;
+    final scope = YumeiroVisualScope.maybeOf(context);
+    return YumeiroVisualScope(
+      surfaceRole: scope?.surfaceRole,
+      controlRole: scope?.controlRole,
+      itemRole: scope?.itemRole,
+      visualOverride: unavailableSelectionVisualOverride(context, role),
+      child: tile,
     );
   }
 }
@@ -591,8 +612,10 @@ class _YumeiroContextMenuAction extends StatelessWidget {
     final theme = YumeiroTheme.of(context);
     final onPressed = yumeiroMenuActionCallback(action);
     final iconSize = theme.iconSizes.sm;
+    final disabledSelection = _showsDisabledSelection(action);
     return YumeiroMenuVisualButton(
       selected: action.selected,
+      showsDisabledSelection: disabledSelection,
       role: action.destructive
           ? YumeiroItemRole.danger
           : YumeiroItemRole.standard,
@@ -608,23 +631,26 @@ class _YumeiroContextMenuAction extends StatelessWidget {
               action.label,
               style: theme.typography
                   .control(selected: action.selected == true)
-                  .copyWith(color: appearance.foreground),
+                  .copyWith(
+                    color: disabledSelection && action.selected != true
+                        ? theme.subtle
+                        : appearance.foreground,
+                  ),
             ),
           ),
           if (action.shortcut != null)
             Text(
               action.shortcut!,
               style: theme.typography.caption.copyWith(
-                color: onPressed != null && action.selected != true
+                color:
+                    (onPressed != null || disabledSelection) &&
+                        action.selected != true
                     ? theme.subtle
                     : appearance.foreground,
               ),
             ),
           if (hasSelection)
-            _actionIconSlot(
-              action.selected == true ? theme.icons.check : null,
-              iconSize,
-            ),
+            _actionSelectionSlot(action, theme.icons.check, iconSize),
         ],
       ),
     );

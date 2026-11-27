@@ -7,6 +7,8 @@ import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 import '../../foundation/modality.dart';
 import '../../l10n/localizations.dart';
 import '../../primitives/glass_backdrop.dart';
+import '../../primitives/pixel_border.dart';
+import '../../primitives/pixel_circle.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/semantic_visuals.dart';
 import '../../theme/theme.dart';
@@ -707,6 +709,7 @@ class _SaturationValueField extends StatelessWidget {
     final l10n = YumeiroLocalizations.of(context);
     final isTouch = YumeiroModalityScope.metricsOf(context).isTouch;
     final radius = theme.buttonRadius;
+    final pixel = theme.checkboxVisuals.shape is YumeiroPixelBorder;
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.isFinite
@@ -809,6 +812,7 @@ class _SaturationValueField extends StatelessWidget {
                             hue: hue,
                             saturation: saturation,
                             value: value,
+                            pixel: pixel,
                           ),
                         ),
                       ),
@@ -842,6 +846,7 @@ class _HueField extends StatelessWidget {
     final l10n = YumeiroLocalizations.of(context);
     final isTouch = YumeiroModalityScope.metricsOf(context).isTouch;
     final radius = theme.chipRadius;
+    final pixel = theme.checkboxVisuals.shape is YumeiroPixelBorder;
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.isFinite
@@ -916,7 +921,9 @@ class _HueField extends StatelessWidget {
                       child: SizedBox(
                         width: width,
                         height: height,
-                        child: CustomPaint(painter: _HuePainter(hue: hue)),
+                        child: CustomPaint(
+                          painter: _HuePainter(hue: hue, pixel: pixel),
+                        ),
                       ),
                     ),
                   ),
@@ -930,16 +937,54 @@ class _HueField extends StatelessWidget {
   }
 }
 
+void _paintSpectrumMarker(
+  Canvas canvas,
+  Offset center, {
+  required double radius,
+  required double shadowOpacity,
+  required bool pixel,
+}) {
+  final shadow = Paint()..color = Colors.black.withValues(alpha: shadowOpacity);
+  if (!pixel) {
+    canvas.drawCircle(center, radius + 2, shadow);
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    return;
+  }
+
+  Path outline(double radius) =>
+      pixelCircleBorder(radius * 2)
+          .getOuterPath(Rect.fromCircle(center: center, radius: radius));
+  final ring = outline(radius + 1)
+    ..addPath(outline(radius - 1), Offset.zero)
+    ..fillType = PathFillType.evenOdd;
+  canvas.drawPath(outline(radius + 2), shadow..isAntiAlias = false);
+  canvas.drawPath(
+    ring,
+    Paint()
+      ..color = Colors.white
+      ..isAntiAlias = false,
+  );
+}
+
 class _SaturationValuePainter extends CustomPainter {
   const _SaturationValuePainter({
     required this.hue,
     required this.saturation,
     required this.value,
+    required this.pixel,
   });
 
   final double hue;
   final double saturation;
   final double value;
+  final bool pixel;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -967,18 +1012,12 @@ class _SaturationValuePainter extends CustomPainter {
       saturation.clamp(0.0, 1.0) * size.width,
       (1 - value.clamp(0.0, 1.0)) * size.height,
     );
-    canvas.drawCircle(
+    _paintSpectrumMarker(
+      canvas,
       marker,
-      8,
-      Paint()..color = Colors.black.withValues(alpha: 0.38),
-    );
-    canvas.drawCircle(
-      marker,
-      6,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
+      radius: 6,
+      shadowOpacity: .38,
+      pixel: pixel,
     );
   }
 
@@ -986,13 +1025,15 @@ class _SaturationValuePainter extends CustomPainter {
   bool shouldRepaint(covariant _SaturationValuePainter oldDelegate) =>
       oldDelegate.hue != hue ||
       oldDelegate.saturation != saturation ||
-      oldDelegate.value != value;
+      oldDelegate.value != value ||
+      oldDelegate.pixel != pixel;
 }
 
 class _HuePainter extends CustomPainter {
-  const _HuePainter({required this.hue});
+  const _HuePainter({required this.hue, required this.pixel});
 
   final double hue;
+  final bool pixel;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1013,24 +1054,18 @@ class _HuePainter extends CustomPainter {
         ).createShader(rect),
     );
     final x = hue.clamp(0.0, 360.0) / 360 * size.width;
-    canvas.drawCircle(
+    _paintSpectrumMarker(
+      canvas,
       Offset(x, size.height / 2),
-      7,
-      Paint()..color = Colors.black.withValues(alpha: 0.35),
-    );
-    canvas.drawCircle(
-      Offset(x, size.height / 2),
-      5,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
+      radius: 5,
+      shadowOpacity: .35,
+      pixel: pixel,
     );
   }
 
   @override
   bool shouldRepaint(covariant _HuePainter oldDelegate) =>
-      oldDelegate.hue != hue;
+      oldDelegate.hue != hue || oldDelegate.pixel != pixel;
 }
 
 bool _sameColor(Color? first, Color? second) {

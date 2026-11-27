@@ -256,13 +256,14 @@ typedef DownloadTask = ({int id, String name, bool complete});
 Widget dataTableDemo(BuildContext context) {
   const items = <DownloadTask>[
     (id: 1, name: '薄荷色的早晨', complete: true),
-    (id: 2, name: '蓝色邮局', complete: true),
     (id: 3, name: '午后列车', complete: false),
+    (id: 2, name: '蓝色邮局', complete: true),
   ];
   YumeiroTableSelectionMode? mode = YumeiroTableSelectionMode.multiple;
   var selected = <Key>{const ValueKey(1)};
   var showOnlyBlueTask = false;
   var useTouchSummary = false;
+  var moveDisabledToEnd = false;
   String? lastOpened;
 
   ValueKey<int> rowKey(DownloadTask task) => ValueKey(task.id);
@@ -333,6 +334,14 @@ Widget dataTableDemo(BuildContext context) {
                   useTouchSummary = !useTouchSummary;
                 }),
               ),
+              YumeiroCheckbox(
+                label: '禁选项置底',
+                value: moveDisabledToEnd,
+                onChanged: mode == null
+                    ? null
+                    : (value) =>
+                          setState(() => moveDisabledToEnd = value ?? false),
+              ),
               Text('已选择 ${selected.length} 项'),
               if (hiddenSelection.isNotEmpty)
                 Text('其中 ${hiddenSelection.length} 项被筛选隐藏'),
@@ -376,6 +385,7 @@ Widget dataTableDemo(BuildContext context) {
                   mode: mode,
                   selectedKeys: selected,
                   isItemEnabled: (item) => item.complete,
+                  moveDisabledToEnd: moveDisabledToEnd,
                   onChanged: (keys) => setState(() => selected = keys),
                 ),
                 null => null,

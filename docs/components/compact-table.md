@@ -36,7 +36,9 @@
 
 宿主持有 `selectedKeys`，通过 <ApiLink symbol="YumeiroTableSelection" /> 将它与 `mode`、`onChanged` 传给表格。用稳定且唯一的 `rowKey` 标识行，例如 `ValueKey(item.id)`。`isItemEnabled` 只控制对应行的选择，尾列操作仍使用自己的启用状态。`rowSemanticsLabel` 可为选择区生成清晰的可访问名称。
 
-选中背景覆盖正文和尾列，四周留出与[标准表](./data-table#受控选择)一致的视觉间距。紧凑变体的正文默认执行选择，尾列按钮各自响应。默认通过行背景表示选中。设置 `showSelectionIndicator: true` 可以在正文起始侧增加按整行高度居中的单选圆点或复选框。也可通过 `rowTapBehavior` 调整点击正文的动作。
+选中背景覆盖正文和尾列，四周留出与[标准表](./data-table#受控选择)一致的视觉间距。紧凑变体的正文默认执行选择，尾列按钮各自响应。默认通过行背景表示选中，禁选行的正文仍遵循 `isItemEnabled`。设置 `showSelectionIndicator: true` 可以在正文起始侧增加按整行高度居中的单选标记或复选框，此时单项禁选会显示斜线。也可通过 `rowTapBehavior` 调整点击正文的动作。
+
+紧凑变体可用 <ApiLink symbol="YumeiroTableSelection.moveDisabledToEnd" /> 将禁选行移到当前 `items` 末尾，默认保持传入顺序。开启后，每组行仍沿用原有顺序，构建器仍收到记录在传入 `items` 中的索引。隐藏选择列时仍可使用此设置。
 
 | 场景 | 宿主配置 |
 | --- | --- |

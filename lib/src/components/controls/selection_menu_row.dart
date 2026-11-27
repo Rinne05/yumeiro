@@ -6,8 +6,8 @@ import '../../foundation/modality.dart';
 import '../../theme/theme.dart';
 import '../../theme/theme_extension.dart';
 import '../overlays/menu_visuals.dart';
-import 'checkboxes.dart';
 import 'form_picker_trigger.dart';
+import 'selection_control.dart';
 import 'select_trigger.dart';
 import 'selection_option.dart';
 
@@ -148,10 +148,14 @@ class SelectionMenuRow<T> extends StatelessWidget {
   final bool showCheckmark;
   final bool showCheckbox;
 
+  bool get _showsDisabledSelection =>
+      !option.enabled && (showCheckmark || showCheckbox);
+
   @override
   Widget build(BuildContext context) => YumeiroMenuVisualButton(
     selected: selected,
     checked: showCheckbox ? selected : null,
+    showsDisabledSelection: _showsDisabledSelection,
     highlighted: highlighted,
     autofocus: autofocus,
     onPressed: option.enabled ? onPressed : null,
@@ -159,7 +163,9 @@ class SelectionMenuRow<T> extends StatelessWidget {
     padding: selectionMenuRowContentPadding,
     builder: (context, appearance) {
       final theme = YumeiroTheme.of(context);
-      final foreground = appearance.foreground;
+      final foreground = _showsDisabledSelection && !selected
+          ? theme.subtle
+          : appearance.foreground;
       final disabled = !option.enabled || onPressed == null;
       final iconColor = selected || disabled ? foreground : theme.muted;
       final centered = textAlign == TextAlign.center;
@@ -220,24 +226,23 @@ class SelectionMenuRow<T> extends StatelessWidget {
         if (trailingIcon != null)
           icon(trailingIcon, size: dense ? theme.iconSizes.xs : null),
         if (showCheckmark)
-          selected
+          !option.enabled
+              ? UnavailableSelectionMark(
+                  size: theme.iconSizes.sm,
+                  selected: selected,
+                )
+              : selected
               ? icon(theme.icons.check)
               : SizedBox(width: theme.iconSizes.sm),
         if (showCheckbox)
-          ExcludeSemantics(
-            child: ExcludeFocus(
-              child: IgnorePointer(
-                child: SizedBox.square(
-                  dimension: checkboxSize,
-                  child: buildYumeiroRowCheckbox(
-                    value: selected,
-                    dense: true,
-                    onChanged: option.enabled && onPressed != null
-                        ? (_) => onPressed!()
-                        : null,
-                  ),
-                ),
-              ),
+          SizedBox.square(
+            dimension: checkboxSize,
+            child: buildSelectionIndicator(
+              multiple: true,
+              selected: selected,
+              onToggle: option.enabled ? onPressed : null,
+              dense: true,
+              disabledForItem: !option.enabled,
             ),
           ),
       ];

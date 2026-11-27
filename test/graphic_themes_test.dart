@@ -192,6 +192,10 @@ void main() {
       0,
     );
     expect(
+      (half.switchVisuals.thumb.base.shape as YumeiroPixelBorder).step,
+      half.switchVisuals.thumbSize / 14,
+    );
+    expect(
       (half.visuals.control(YumeiroControlRole.neutral, const {}).shape
               as YumeiroPixelBorder)
           .step,

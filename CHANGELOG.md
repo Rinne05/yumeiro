@@ -1,3 +1,12 @@
+## 0.2.0
+
+- `YumeiroTableSelection<T>` adds optional `moveDisabledToEnd`, defaulting to `false`. When enabled, eligible rows precede ineligible rows in the current `items` list. Both groups preserve their relative order, and table builders still receive the original item index.
+- Tables and inline selection lists mark ineligible choices with a slash. Choice checkboxes in selection rows and multi-select menus use the same marker. Pixel radio rings and dots follow the slider thumb's stepped contour. Table radios retain keyboard focus when the theme preset changes.
+- Disabled checkboxes and switches, individual segments, single-choice options, cascading choices, and selectable menu actions use the shared unavailable mark. Disabled checked and mixed checkboxes use the same visual style while keeping their accessible values. Pixel switch thumbs, color-picker markers, badge dots, media play buttons, and avatars use stepped circular outlines with finer steps at larger sizes.
+- Date and time pickers use more compact pointer panels and standard action targets. Single-date calendar actions wrap in narrow windows. Touch calendars keep the input switch by the title, and touch time pickers show a centered wheel selection. The existing `initialEntryMode` still selects the starting view.
+- Pagination uses the theme's control font, highlights the current page and shows a passive readout when jump-to-page is unavailable.
+- Touch toast hosts show one card and up to two stacked edges. In touch-only hosts, timers count down in the foreground. Default placement clears the keyboard and visible bottom navigation. After the last toast exits, the host takes its size from its child and parent constraints. Pointer hosts keep the multi-card queue.
+
 ## 0.1.0
 
 - First distribution from source. Includes adaptive Yumeiro controls, navigation, overlays, a data table with standard and compact variants, 24 theme presets, and the material effect pipeline.

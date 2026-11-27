@@ -3,10 +3,10 @@
 选择控件由调用方传入当前值，用户操作经由 `onChanged` 报告给调用方。根据选项数量、是否可搜索及是否有层级来选组件。
 
 - 「下拉」提供画质单选、带状态的筛选下拉和台站搜索。试着提交已有台站、自定义名称或清空当前值。
-- 「开关与分段」展示开关、三态复选、整行勾选以及横向和纵向分段。时间线选项用于展示禁用状态。
+- 「开关与分段」展示开关、三态复选、整行勾选以及横向和纵向分段。可以切换「禁用开关和复选框」，也可以查看分段中的禁用项。
 - 「级联与设置」展示分支导航、叶项提交和适应输入模式的设置选择。
 
-<ComponentDemo id="selection" title="单选、可搜索下拉框与级联预览" :overlay-height="590" input-modes compact-touch>
+<ComponentDemo id="selection" title="单选、可搜索下拉框与级联预览" :overlay-height="590" input-modes compact-touch theme-styles>
 
 <<< ../../example/lib/docs/demos.dart#selection
 
@@ -22,9 +22,13 @@
 | <ApiLink symbol="YumeiroSegmentedControl" /> | 少量同级值同时可见，`expand` 控制选项是否填满空间。 |
 | <ApiLink symbol="YumeiroSegmentedControl.vertical" /> | 选项有副标题或自定义前导内容，需要纵向排列。 |
 
-横向和纵向分段都使用 <ApiLink symbol="YumeiroSegmentOption" />。纵向分段在指针和触控模式都使用主题提供的分组背景和边框，还可显示 `subtitle` 和自定义前导组件 `leading`。纯图标选项应提供 `tooltip`。用选项的 `enabled` 禁用单项，用 `onChanged: null` 禁用整个控件。
+横向和纵向分段都使用 <ApiLink symbol="YumeiroSegmentOption" />。纵向分段在指针和触控模式都使用主题提供的分组背景和边框，还可显示 `subtitle` 和自定义前导组件 `leading`。纯图标选项应提供 `tooltip`。
+
+在可交互的分段控件中，将某项的 `enabled` 设为 `false` 会显示斜线标记，已选项保留底色。纵向布局的 `showCheckmark: false` 可关闭选中勾号，禁用标记继续显示。用 `onChanged: null` 禁用整个控件时，分段组使用整体禁用样式。
 
 三态复选框依次请求 `false → true → null → false`。用于父级「全选」时，通常由子项集合派生混合态，并根据业务规则处理下一次点击，例如直接选中当前范围内所有可选项。
+
+独立复选框禁用时显示斜线。禁用已选与禁用混合态使用相同的底色和居中斜线，读屏仍能区分两种值。禁用开关在滑块上显示斜线，滑块位置继续表示开或关。表单的 `readOnly: true` 保留原有选中标记并可聚焦。复古像素主题的开关滑块使用与像素滑块一致的圆形轮廓比例，并随主题圆角设置调整。
 
 ## 下拉选择
 
@@ -42,6 +46,8 @@
 指针下拉与触发器的默认距离使用主题的 `spacing.xs`，内置默认值为 4 个逻辑像素。菜单上翻和下展沿用同一间距。`YumeiroSelect.menu` 的 `offset` 可显式指定位置偏移，窗口边缘可限制菜单的位置。
 
 单选入口在指针模式打开锚定菜单，在紧凑竖屏的触控模式打开贴底面板。浮层默认使用根导航器，传入 `useRootNavigator: false` 可交由最近的导航器。用 `readOnly: true` 保留已选值和焦点，用 `enabled: false` 禁用控件。表单里需要允许用户清空单选时，使用 [`YumeiroSelect.form` 的 `clearable` 选项](./inputs#flutter-表单)。
+
+在指针下拉和触控面板中，将某个 `YumeiroSelectionOption.enabled` 设为 `false` 会在选项末端显示斜线标记。该项原本已选时继续高亮。此规则也适用于可搜索及远程单选。
 
 常规单选、`YumeiroSelect.menu` 和设置行有候选项时才可打开。浮层打开后会随调用方更新选项和当前值。控件禁用、设为只读或清空候选项时会关闭浮层。
 
@@ -70,11 +76,13 @@
 
 <ApiLink symbol="YumeiroSelectionList" /> 将选项始终显示在页面或自定义面板里。传入 `values`，通过 `onChanged` 接收新集合。单选会替换当前选项。打开 `multiple: true` 后，每次勾选立即更新集合。用空集合表示未选，可用 `{null}` 表示选中了值为 `null` 的选项。
 
-单选用圆圈，多选用方框。两种指示器均从行首对齐，在有两行文字时仍按整行垂直居中。单选时按 Tab 进出选项组，方向键在启用选项间切换。搜索默认隐藏，开启 `searchable` 后只过滤可见项，并保留已选择的隐藏项。选项卡片和搜索框同宽。开启 `clearable` 时，可从搜索框最右侧清空选中项，保留当前查询。没有搜索框时，清空操作位于选项卡片上方。
+单选用圆圈，多选用方框。两种指示器均从行首对齐，在有两行文字时仍按整行垂直居中。复古像素主题的圆环和圆点采用与滑块一致的阶梯轮廓。将某项的 `YumeiroSelectionOption.enabled` 设为 `false`，它的指示器中心会显示斜线，原本已选时同时保留选中底色。整组只读或整体禁用时保留原有选中标记。单选时按 Tab 进出选项组，方向键在启用选项间切换。
+
+搜索默认隐藏，开启 `searchable` 后只过滤可见项，并保留已选择的隐藏项。选项卡片和搜索框同宽。开启 `clearable` 时，可从搜索框最右侧清空选中项，保留当前查询。没有搜索框时，清空操作位于选项卡片上方。
 
 在已有滚动区域中设置 `scrollable: false`。在有界高度的容器中可用独立滚动按需构建选项。宿主需要在点选后关闭自定义面板时，可以用 `onSelected` 监听点击，重复点击当前单选项也会报告该选项。
 
-<ComponentDemo id="selection-list" title="内联单选、多选与长列表预览" :overlay-height="440" input-modes compact-touch>
+<ComponentDemo id="selection-list" title="内联单选、多选与长列表预览" :overlay-height="440" input-modes compact-touch theme-styles>
 
 <<< ../../example/lib/docs/form_controls_demo.dart#selection-list
 
@@ -92,7 +100,7 @@
 
 指针模式在字段内输入查询，字段旁的弹层列出候选。展开后可用字段尾部的「取消」关闭。勾选改变草稿后，字段尾部显示「确认（数量）」并提供取消操作。确认后更新字段并恢复选中摘要。按 `Esc` 或点字段与弹层之外会放弃草稿。
 
-触控模式在选择面板内搜索、勾选和确认，收起面板可放弃草稿。表单预览中的字段 C 和画廊「交互控件 → 标签 → 多选标签」均展示确认后应用的交互。
+触控模式在选择面板内搜索、勾选和确认，收起面板可放弃草稿。两种模式的多选候选都用斜线复选框标记单项禁用。表单预览中的字段 C 和画廊「交互控件 → 标签 → 多选标签」均展示确认后应用的交互。
 
 浮层打开时更新选项或已提交值，未编辑的项会跟随新值。用户的暂存勾选在对应选项仍可用时保留。表单重置会丢弃草稿。
 
@@ -112,6 +120,6 @@
 
 键盘可用上下方向键在同级选项间移动。展开与返回的方向键随阅读方向变化，RTL 布局中按左键展开、右键返回。
 
-叶项 `value` 应能唯一定位一条选择路径，例如目录记录的 ID。给禁用的分类或叶项传入 `enabled: false`。整个控件传入 `onChanged: null` 时只展示当前值。
+叶项 `value` 应能唯一定位一条选择路径，例如目录记录的 ID。分类或叶项设为 `enabled: false` 时会显示斜线标记，并禁止展开或提交该项。整个控件传入 `onChanged: null` 时只展示当前值。
 
 可用 <ApiLink symbol="YumeiroCascadingSelection" /> 将级联选项主体放入自定义组合。独立选择面板的扩展入口见[底部与选择面板](./sheets)。

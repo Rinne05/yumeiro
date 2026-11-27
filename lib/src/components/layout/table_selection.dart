@@ -27,6 +27,7 @@ class YumeiroTableSelection<T> {
     this.selectedKeys = const <Key>{},
     this.onChanged,
     this.isItemEnabled,
+    this.moveDisabledToEnd = false,
   });
 
   /// How the current view presents and updates [selectedKeys].
@@ -44,6 +45,13 @@ class YumeiroTableSelection<T> {
   /// Whether the user can change this row's selection. The row's other
   /// actions keep their own enabled state.
   final bool Function(T item)? isItemEnabled;
+
+  /// Displays rows rejected by [isItemEnabled] after eligible rows. Both
+  /// groups retain their supplied order. Applies only to the supplied items.
+  ///
+  /// When enabled, the table checks eligibility for all supplied items,
+  /// including rows that have yet to be built in a sliver.
+  final bool moveDisabledToEnd;
 }
 
 List<Key> buildTableRowKeys<T>(List<T> items, Key Function(T item)? rowKey) {
@@ -72,6 +80,7 @@ final class TableSelectionState {
   const TableSelectionState._({
     required this.mode,
     required this.isSelected,
+    required this.isItemEnabled,
     required this.toggleFor,
     this.allSelected = false,
     this.toggleAll,
@@ -79,6 +88,9 @@ final class TableSelectionState {
 
   final YumeiroTableSelectionMode? mode;
   final bool Function(int index) isSelected;
+
+  /// Resolves eligibility by index in the supplied items.
+  final bool Function(int index) isItemEnabled;
   final VoidCallback? Function(int index) toggleFor;
   final bool? allSelected;
   final VoidCallback? toggleAll;
@@ -93,20 +105,25 @@ final class TableSelectionState {
       return TableSelectionState._(
         mode: null,
         isSelected: (_) => false,
+        isItemEnabled: (_) => true,
         toggleFor: (_) => null,
       );
     }
 
     final onChanged = selection.onChanged;
-    final isItemEnabled = selection.isItemEnabled;
+    final itemEnabled = selection.isItemEnabled;
+    final eligibility = <int, bool>{};
+    bool isItemEnabled(int index) =>
+        itemEnabled == null ||
+        eligibility.putIfAbsent(index, () => itemEnabled(items[index]));
 
     if (selection.mode == YumeiroTableSelectionMode.single) {
       final selectedKey = selection.selectedKeys.firstOrNull;
       return TableSelectionState._(
         mode: YumeiroTableSelectionMode.single,
         isSelected: (index) => keys[index] == selectedKey,
-        toggleFor: (index) =>
-            onChanged != null && (isItemEnabled?.call(items[index]) ?? true)
+        isItemEnabled: isItemEnabled,
+        toggleFor: (index) => onChanged != null && isItemEnabled(index)
             ? () {
                 final key = keys[index];
                 if (key != selectedKey) onChanged({key});
@@ -118,11 +135,11 @@ final class TableSelectionState {
     final selected = selection.selectedKeys;
     final eligible = !includeBulkSelection
         ? null
-        : isItemEnabled == null
+        : itemEnabled == null
         ? keys.toSet()
         : {
             for (var index = 0; index < items.length; index++)
-              if (isItemEnabled(items[index])) keys[index],
+              if (isItemEnabled(index)) keys[index],
           };
     final allSelected = eligible == null
         ? false
@@ -130,11 +147,8 @@ final class TableSelectionState {
     return TableSelectionState._(
       mode: YumeiroTableSelectionMode.multiple,
       isSelected: (index) => selected.contains(keys[index]),
-      toggleFor: (index) =>
-          onChanged != null &&
-              (eligible?.contains(keys[index]) ??
-                  isItemEnabled?.call(items[index]) ??
-                  true)
+      isItemEnabled: isItemEnabled,
+      toggleFor: (index) => onChanged != null && isItemEnabled(index)
           ? () {
               final key = keys[index];
               final updated = Set<Key>.of(selected);

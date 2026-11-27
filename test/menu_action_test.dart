@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:yumeiro/src/components/controls/selection_control.dart';
 import 'package:yumeiro/yumeiro.dart';
 
 void main() {
@@ -44,6 +45,11 @@ void main() {
                           selected: false,
                           onPressed: () {},
                         ),
+                        const YumeiroMenuAction(
+                          label: 'Locked view',
+                          selected: true,
+                          enabled: false,
+                        ),
                       ],
                     ),
                   ),
@@ -61,7 +67,7 @@ void main() {
         }
 
         final start = startOf('Plain');
-        for (final label in ['Artwork', 'List', 'Grid']) {
+        for (final label in ['Artwork', 'List', 'Grid', 'Locked view']) {
           expect(startOf(label), closeTo(start, .01));
         }
 
@@ -79,9 +85,20 @@ void main() {
         expect(mark('Artwork'), findsOneWidget);
         expect(mark('List'), findsOneWidget);
         expect(mark('Grid'), findsNothing);
+        expect(mark('Locked view'), findsNothing);
+        final unavailable = find.byType(UnavailableSelectionMark);
+        expect(unavailable, findsOneWidget);
+        expect(
+          tester.widget<UnavailableSelectionMark>(unavailable).selected,
+          isTrue,
+        );
         expect(
           tester.getCenter(mark('Artwork')).dx,
           tester.getCenter(mark('List')).dx,
+        );
+        expect(
+          tester.getCenter(mark('List')).dx,
+          tester.getCenter(unavailable).dx,
         );
       },
     );
@@ -139,6 +156,7 @@ void main() {
       expect(heading, findsOneWidget);
       expect(secondHeading, findsOneWidget);
       expect(divider, findsOneWidget);
+      expect(find.byType(UnavailableSelectionMark), findsNothing);
       expect(
         tester.getTopLeft(heading).dy,
         lessThan(tester.getTopLeft(missingCallback).dy),

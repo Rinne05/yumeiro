@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:yumeiro/src/primitives/selection_marks.dart';
 import 'package:yumeiro/yumeiro.dart';
 
 void main() {
@@ -109,6 +110,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(focus.hasPrimaryFocus, isTrue);
     expect(disabledFocus.hasFocus, isFalse);
+    expect(_foregroundMarks(find.byType(YumeiroCheckbox)), findsNothing);
+    expect(_foregroundMarks(find.byType(YumeiroSwitch)), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.tap(find.byType(YumeiroCheckbox), warnIfMissed: false);
     await tester.tap(find.byType(YumeiroSwitch));
@@ -176,9 +179,139 @@ void main() {
     expect(key.currentState, isNot(same(checkbox)));
     expect(key.currentState!.value, isTrue);
   });
+
+  testWidgets(
+    'disabled boolean controls mark unavailability and retain values',
+    (tester) async {
+      const off = ValueKey('switch-off');
+      const on = ValueKey('switch-on');
+      const checked = ValueKey('checked');
+      const mixed = ValueKey('mixed');
+      final changes = <bool?>[];
+
+      await tester.pumpWidget(
+        _app(
+          Column(
+            children: [
+              YumeiroCheckbox(
+                key: checked,
+                label: 'Checked permission',
+                value: true,
+                enabled: false,
+                onChanged: changes.add,
+              ),
+              const YumeiroCheckbox(
+                key: mixed,
+                label: 'Mixed permission',
+                value: null,
+                tristate: true,
+                onChanged: null,
+              ),
+              const YumeiroSwitch(
+                key: off,
+                value: false,
+                onChanged: null,
+                semanticLabel: 'Offline reminders',
+              ),
+              const YumeiroSwitch(
+                key: on,
+                value: true,
+                onChanged: null,
+                semanticLabel: 'Live reminders',
+              ),
+            ],
+          ),
+          preset: YumeiroThemePresets.pixelDark,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final key in [off, on, checked, mixed]) {
+        expect(_foregroundMarks(find.byKey(key)), findsOneWidget);
+        await tester.tapAt(tester.getCenter(find.byKey(key)));
+      }
+      expect(changes, isEmpty);
+
+      CustomPaint mark(Key key) =>
+          tester.widget(_foregroundMarks(find.byKey(key)));
+      final checkedMark = mark(checked);
+      final mixedMark = mark(mixed);
+      expect(
+        tester.getSize(_foregroundMarks(find.byKey(checked))),
+        tester.getSize(_foregroundMarks(find.byKey(mixed))),
+      );
+      expect(
+        mixedMark.foregroundPainter!.shouldRepaint(
+          checkedMark.foregroundPainter!,
+        ),
+        isFalse,
+      );
+      for (final marker in [checked, mixed]) {
+        final nativeCheckbox = tester.widget<Checkbox>(
+          find.descendant(
+            of: find.byKey(marker),
+            matching: find.byType(Checkbox),
+          ),
+        );
+        expect(nativeCheckbox.checkColor, Colors.transparent);
+      }
+      expect(
+        find.semantics.byLabel('Checked permission').evaluate().single,
+        isSemantics(
+          hasCheckedState: true,
+          isChecked: true,
+          hasEnabledState: true,
+          isEnabled: false,
+          hasTapAction: false,
+        ),
+      );
+      expect(
+        find.semantics.byLabel('Mixed permission').evaluate().single,
+        isSemantics(
+          hasCheckedState: true,
+          isCheckStateMixed: true,
+          hasEnabledState: true,
+          isEnabled: false,
+          hasTapAction: false,
+        ),
+      );
+      expect(
+        find.semantics.byLabel('Live reminders').evaluate().single,
+        isSemantics(
+          hasToggledState: true,
+          isToggled: true,
+          hasEnabledState: true,
+          isEnabled: false,
+          hasTapAction: false,
+        ),
+      );
+
+      final visuals = YumeiroTheme.of(tester.element(find.byKey(on)))
+          .switchVisuals;
+      final thumb = visuals.thumb.resolve(const {WidgetState.disabled});
+      expect(thumb.shape, isA<YumeiroPixelBorder>());
+      expect(
+        (thumb.shape as YumeiroPixelBorder).step,
+        visuals.thumbSize * 2 / 14,
+      );
+      final offMark = tester.getCenter(_foregroundMarks(find.byKey(off)));
+      final onMark = tester.getCenter(_foregroundMarks(find.byKey(on)));
+      expect(onMark.dx, greaterThan(offMark.dx));
+    },
+  );
 }
 
-Widget _app(Widget child) => YumeiroApp(
+Finder _foregroundMarks(Finder of) => find.descendant(
+  of: of,
+  matching: find.byWidgetPredicate(
+    (widget) =>
+        widget is CustomPaint &&
+        widget.foregroundPainter is UnavailableSlashPainter,
+  ),
+);
+
+Widget _app(Widget child, {YumeiroThemePreset? preset}) => YumeiroApp(
+  preset: preset ?? YumeiroThemePresets.classicLight,
   modality: YumeiroModality.pointer,
   home: Scaffold(body: child),
 );

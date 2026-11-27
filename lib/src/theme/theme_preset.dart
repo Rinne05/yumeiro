@@ -11,6 +11,7 @@ import '../foundation/spacing.dart';
 import '../foundation/typography.dart';
 import '../l10n/localizations.dart';
 import '../primitives/pixel_border.dart';
+import '../primitives/pixel_circle.dart';
 import 'effect_pass.dart';
 import 'materials.dart';
 import 'semantic_visuals.dart';
@@ -751,7 +752,7 @@ abstract final class YumeiroThemePresets {
     motion: const YumeiroMotion(fast: Duration(milliseconds: 80)),
     radii: const YumeiroRadiiTokens(
       chip: 3,
-      button: 3,
+      button: _pixelDefaultButtonStep,
       md: 4,
       lg: 4,
       checkbox: 2,

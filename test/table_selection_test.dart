@@ -10,6 +10,7 @@ const _alphaKey = ValueKey(1);
 const _betaKey = ValueKey(2);
 const _lockedKey = ValueKey(3);
 const _hiddenKey = ValueKey(99);
+const _selectionMarkKey = ValueKey('yumeiro-table-selection-mark');
 const _rows = [
   (id: 1, title: 'Alpha'),
   (id: 2, title: 'Beta'),
@@ -442,6 +443,195 @@ void main() {
   }
 
   testWidgets(
+    'table marks row-specific disabled states in the selection slot',
+    (tester) async {
+      final opened = <int>[];
+      final changes = <Set<Key>>[];
+      Widget table(YumeiroTableSelectionMode mode, {bool readOnly = false}) =>
+          _host(
+            child: _dataTable(
+              selection: YumeiroTableSelection(
+                mode: mode,
+                selectedKeys: {_lockedKey},
+                isItemEnabled: (row) => row.id == 1,
+                onChanged: readOnly ? null : changes.add,
+              ),
+              onRowTap: (row) => opened.add(row.id),
+            ),
+          );
+
+      for (final mode in YumeiroTableSelectionMode.values) {
+        await tester.pumpWidget(table(mode));
+        await tester.pumpAndSettle();
+        expect(_selectionMarkIn(_alphaKey), findsNothing);
+        expect(_selectionMarkIn(_betaKey), findsOneWidget);
+        expect(_selectionMarkIn(_lockedKey), findsOneWidget);
+
+        await tester.tapAt(tester.getCenter(_selectionMarkIn(_lockedKey)));
+        await tester.pumpAndSettle();
+        expect(opened, isEmpty);
+        expect(changes, isEmpty);
+        await _tap(tester, find.text('Locked'));
+        expect(opened, [3]);
+        opened.clear();
+
+        await tester.pumpWidget(table(mode, readOnly: true));
+        await tester.pumpAndSettle();
+        expect(_selectionMarks(), findsNothing);
+      }
+    },
+  );
+
+  testWidgets('pixel table radios keep native keyboard and checked semantics', (
+    tester,
+  ) async {
+    var selected = <Key>{_alphaKey};
+    await tester.pumpWidget(
+      YumeiroApp(
+        preset: YumeiroThemePresets.pixelDark,
+        modality: YumeiroModality.pointer,
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (_, setState) => _dataTable(
+              selection: YumeiroTableSelection(
+                mode: YumeiroTableSelectionMode.single,
+                selectedKeys: selected,
+                isItemEnabled: (row) => row.id != 2,
+                onChanged: (keys) => setState(() => selected = keys),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(_selectionMarks(), findsNWidgets(3));
+
+    Finder radioIn(Key key) => find.descendant(
+      of: find.byKey(key),
+      matching: find.byWidgetPredicate((widget) => widget is RawRadio<Object>),
+    );
+    expect(
+      tester.getSemantics(radioIn(_alphaKey)),
+      isSemantics(hasCheckedState: true, isChecked: true),
+    );
+    expect(
+      tester.getSemantics(radioIn(_betaKey)),
+      isSemantics(
+        hasCheckedState: true,
+        hasEnabledState: true,
+        isEnabled: false,
+      ),
+    );
+    tester
+        .widget<RawRadio<Object>>(radioIn(_alphaKey))
+        .focusNode
+        .requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(selected, {_lockedKey});
+    expect(
+      tester.getSemantics(radioIn(_lockedKey)),
+      isSemantics(hasCheckedState: true, isChecked: true),
+    );
+  });
+
+  testWidgets('table radio keeps keyboard focus through a preset switch', (
+    tester,
+  ) async {
+    final changes = <Set<Key>>[];
+    final home = Scaffold(
+      body: _dataTable(
+        selection: YumeiroTableSelection(
+          mode: YumeiroTableSelectionMode.single,
+          selectedKeys: {_alphaKey},
+          onChanged: changes.add,
+        ),
+      ),
+    );
+    Future<void> show(YumeiroThemePreset preset) async {
+      await tester.pumpWidget(
+        YumeiroApp(
+          preset: preset,
+          modality: YumeiroModality.pointer,
+          home: home,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    FocusNode radioFocus(Key rowKey) => tester
+        .widget<RawRadio<Object>>(
+          find.descendant(
+            of: find.byKey(rowKey),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is RawRadio<Object>,
+            ),
+          ),
+        )
+        .focusNode;
+
+    await show(YumeiroThemePresets.classicDark);
+    final originalFocus = radioFocus(_alphaKey)..requestFocus();
+    await tester.pump();
+    expect(originalFocus.hasPrimaryFocus, isTrue);
+
+    for (final preset in [
+      YumeiroThemePresets.pixelDark,
+      YumeiroThemePresets.classicDark,
+    ]) {
+      await show(preset);
+      expect(radioFocus(_alphaKey), same(originalFocus));
+      expect(originalFocus.hasPrimaryFocus, isTrue);
+    }
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(changes, [
+      {_betaKey},
+    ]);
+    expect(radioFocus(_betaKey).hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('compact tables show disabled marks only with a selection slot', (
+    tester,
+  ) async {
+    final changes = <Set<Key>>[];
+    Widget table({required bool showIndicator}) => _host(
+      modality: YumeiroModality.touch,
+      child: YumeiroDataTable<_Row>(
+        variant: YumeiroTableVariant.compact,
+        items: _rows,
+        rowKey: (row) => ValueKey(row.id),
+        showSelectionIndicator: showIndicator,
+        selection: YumeiroTableSelection(
+          mode: YumeiroTableSelectionMode.multiple,
+          isItemEnabled: (row) => row.id != 3,
+          onChanged: changes.add,
+        ),
+        compactRowBuilder: (_, row, _) => Text(row.title),
+        columns: const [],
+      ),
+    );
+
+    await tester.pumpWidget(table(showIndicator: false));
+    await tester.pumpAndSettle();
+    expect(_selectionMarks(), findsNothing);
+    await tester.pumpWidget(table(showIndicator: true));
+    await tester.pumpAndSettle();
+    expect(_selectionMarkIn(_lockedKey), findsOneWidget);
+
+    await tester.tapAt(tester.getCenter(find.text('Locked')));
+    await tester.pumpAndSettle();
+    expect(changes, isEmpty);
+    await _tap(tester, find.text('Beta'));
+    expect(changes, [
+      {_betaKey},
+    ]);
+  });
+
+  testWidgets(
     'compact table shares selection modes and keeps actions independent',
     (tester) async {
       final semantics = tester.ensureSemantics();
@@ -592,6 +782,16 @@ Widget _host({
   modality: modality,
   home: Scaffold(body: child),
 );
+
+Finder _selectionMarks() => find.byWidgetPredicate(
+  (widget) =>
+      widget is CustomPaint &&
+      widget.key == _selectionMarkKey &&
+      widget.foregroundPainter != null,
+);
+
+Finder _selectionMarkIn(Key rowKey) =>
+    find.descendant(of: find.byKey(rowKey), matching: _selectionMarks());
 
 YumeiroDataTable<_Row> _dataTable({
   required YumeiroTableSelection<_Row> selection,

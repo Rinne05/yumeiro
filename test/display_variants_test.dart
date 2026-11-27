@@ -3,6 +3,95 @@ import 'package:material_ui/material_ui.dart';
 import 'package:yumeiro/yumeiro.dart';
 
 void main() {
+  testWidgets('round media and badge geometry follows the active preset', (
+    tester,
+  ) async {
+    const avatar = ValueKey('avatar');
+    const play = ValueKey('play');
+    const button = ValueKey('button');
+    var plays = 0;
+    for (final (preset, pixel) in [
+      (YumeiroThemePresets.classicLight, false),
+      (YumeiroThemePresets.pixelDark, true),
+    ]) {
+      await tester.pumpWidget(
+        YumeiroApp(
+          preset: preset,
+          modality: YumeiroModality.pointer,
+          home: Scaffold(
+            body: Column(
+              children: [
+                const YumeiroAvatar(key: avatar, radius: 14),
+                YumeiroMediaPlayButton(key: play, onPressed: () => plays++),
+                YumeiroButton(
+                  key: button,
+                  badge: true,
+                  icon: Icons.notifications,
+                  tooltip: 'Activity',
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final playSurface = tester.widget<YumeiroResolvedVisualSurface>(
+        find.descendant(
+          of: find.byKey(play),
+          matching: find.byType(YumeiroResolvedVisualSurface),
+        ),
+      );
+      final badge = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byKey(button),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is DecoratedBox &&
+                widget.decoration is ShapeDecoration &&
+                widget.child is SizedBox &&
+                (widget.child as SizedBox).width == 5,
+          ),
+        ),
+      );
+      final badgeShape = (badge.decoration as ShapeDecoration).shape;
+      if (pixel) {
+        final clip = tester.widget<ClipPath>(
+          find.descendant(
+            of: find.byKey(avatar),
+            matching: find.byType(ClipPath),
+          ),
+        );
+        final avatarShape = (clip.clipper! as ShapeBorderClipper).shape;
+        final avatarClip = avatarShape.getOuterPath(
+          const Rect.fromLTWH(0, 0, 28, 28),
+        );
+        final playOutline = playSurface.appearance.shape.getOuterPath(
+          const Rect.fromLTWH(0, 0, 42, 42),
+        );
+        expect(avatarClip.contains(const Offset(7, 3)), isTrue);
+        expect(avatarClip.contains(const Offset(1, 1)), isFalse);
+        expect(playOutline.contains(const Offset(10, 5)), isTrue);
+        expect(playOutline.contains(const Offset(1, 1)), isFalse);
+        expect((badgeShape as YumeiroPixelBorder).step, closeTo(5 / 7, 0.001));
+      } else {
+        expect(
+          find.descendant(
+            of: find.byKey(avatar),
+            matching: find.byType(ClipOval),
+          ),
+          findsOneWidget,
+        );
+        expect(playSurface.appearance.shape, isA<CircleBorder>());
+        expect(badgeShape, isA<CircleBorder>());
+      }
+      expect(tester.getSize(find.byKey(avatar)), const Size.square(28));
+      expect(tester.getSize(find.byKey(play)), const Size.square(42));
+      await tester.tap(find.byKey(play));
+    }
+    expect(plays, 2);
+  });
+
   testWidgets('section badge and callout action wrap below readable text', (
     tester,
   ) async {

@@ -43,6 +43,11 @@ class _TimePickerPanelState extends State<_TimePickerPanel> {
   bool get _use24Hours => hourFormat(of: _format) != HourFormat.h;
   int get _firstHour => _use24Hours ? 0 : 1;
   int get _hourCount => _use24Hours ? 24 : 12;
+  String get _separator => switch (_format) {
+    TimeOfDayFormat.HH_dot_mm => '.',
+    TimeOfDayFormat.frenchCanadian => 'h',
+    _ => ':',
+  };
 
   @override
   void didChangeDependencies() {
@@ -160,6 +165,8 @@ class _TimePickerPanelState extends State<_TimePickerPanel> {
   Widget _numberField({
     required bool isHour,
     required MaterialLocalizations messages,
+    required TextStyle style,
+    required double? height,
   }) {
     final first = isHour ? _firstHour : 0;
     final count = isHour ? _hourCount : 60;
@@ -195,6 +202,255 @@ class _TimePickerPanelState extends State<_TimePickerPanel> {
         onSubmitted: isHour ? null : (_) => _confirm(),
         dense: !widget.touch,
         hasError: _showError,
+        style: style,
+        height: height,
+      ),
+    );
+  }
+
+  Widget _numberReadouts(BuildContext context, MaterialLocalizations messages) {
+    final theme = YumeiroTheme.of(context);
+    final metrics = YumeiroModalityScope.metricsOf(context);
+    final number = theme.typography.mono(
+      fontSize: 22,
+      fontWeight: theme.typography.emphasisWeight,
+    );
+    final fieldHeight = math.max(
+      44.0,
+      yumeiroPickerMinHeight(context, metrics, !widget.touch, style: number),
+    );
+    final fieldWidth = math.max(
+      84.0,
+      MediaQuery.textScalerOf(context).scale(number.fontSize!) * 2 +
+          yumeiroPickerHorizontalPadding(metrics, !widget.touch) * 2,
+    );
+    Widget readout(String text) => YumeiroVisualSurface(
+      role: YumeiroSurfaceRole.readout,
+      child: SizedBox(
+        height: fieldHeight,
+        child: Center(child: Text(text, style: number, maxLines: 1)),
+      ),
+    );
+    final hour = _showFields
+        ? _numberField(
+            isHour: true,
+            messages: messages,
+            style: number,
+            height: widget.touch ? null : fieldHeight,
+          )
+        : readout(_hourText(messages, _displayHour(_draft)));
+    final minute = _showFields
+        ? _numberField(
+            isHour: false,
+            messages: messages,
+            style: number,
+            height: widget.touch ? null : fieldHeight,
+          )
+        : readout(_minuteText(messages, _draft.minute));
+    final pair = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: widget.touch ? 0 : 48),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: theme.spacing.xs,
+          children: [
+            Flexible(
+              child: SizedBox(width: fieldWidth, child: hour),
+            ),
+            Text(
+              _separator,
+              style: number.copyWith(fontSize: 20, color: theme.muted),
+            ),
+            Flexible(
+              child: SizedBox(width: fieldWidth, child: minute),
+            ),
+          ],
+        ),
+      ),
+    );
+    return YumeiroFieldLayout(
+      errorText: _showFields && _showError ? messages.invalidTimeLabel : null,
+      child: pair,
+    );
+  }
+
+  Widget _touchReadout(BuildContext context, MaterialLocalizations messages) {
+    final theme = YumeiroTheme.of(context);
+    final metrics = YumeiroModalityScope.metricsOf(context);
+    final formattedTime = messages.formatTimeOfDay(
+      _draft,
+      alwaysUse24HourFormat: widget.alwaysUse24HourFormat,
+    );
+    final iconSize = theme.iconSizes.sm;
+    final content = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: metrics.minTargetSize),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: theme.spacing.sm),
+        child: Row(
+          children: [
+            if (_canSwitch) SizedBox(width: iconSize),
+            Expanded(
+              child: Text(
+                formattedTime,
+                textAlign: TextAlign.center,
+                style: theme.typography.mono(
+                  fontSize: 24,
+                  fontWeight: theme.typography.emphasisWeight,
+                ),
+              ),
+            ),
+            if (_canSwitch)
+              Icon(theme.icons.edit, size: iconSize, color: theme.muted),
+          ],
+        ),
+      ),
+    );
+    if (!_canSwitch) {
+      return YumeiroVisualSurface(
+        role: YumeiroSurfaceRole.readout,
+        child: content,
+      );
+    }
+    final readout = theme.visuals.surface(YumeiroSurfaceRole.readout);
+    return Tooltip(
+      message: messages.inputTimeModeButtonLabel,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        label: messages.inputTimeModeButtonLabel,
+        value: formattedTime,
+        child: YumeiroInteractiveVisualSurface(
+          role: YumeiroControlRole.secondary,
+          visualOverride: YumeiroVisualOverride(
+            base: YumeiroVisualDelta(
+              fill: readout.fill,
+              shape: readout.shape,
+              outline: readout.outline,
+              effects: readout.effects,
+              foreground: readout.foreground,
+            ),
+          ),
+          onTap: _switchMode,
+          child: ExcludeSemantics(child: content),
+        ),
+      ),
+    );
+  }
+
+  Widget _choices(BuildContext context, MaterialLocalizations messages) {
+    final theme = YumeiroTheme.of(context);
+    final metrics = YumeiroModalityScope.metricsOf(context);
+    final touch = widget.touch;
+    final numberStyle = theme.typography.mono(fontSize: touch ? 20 : 13);
+    final extent = math.max(
+      metrics.minTargetSize,
+      MediaQuery.textScalerOf(context).scale(numberStyle.fontSize!) *
+              (numberStyle.height ?? 1.2) +
+          theme.spacing.xs,
+    );
+    Widget label(String text) => Expanded(
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: theme.spacing.xs),
+          child: Text(
+            text,
+            style: theme.typography.caption.copyWith(color: theme.muted),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+    final hours = messages.timePickerHourLabel;
+    final minutes = messages.timePickerMinuteLabel;
+    final columns = Row(
+      children: [
+        Expanded(
+          child: _TimeChoices(
+            key: ValueKey(('hours', _hourCount, touch, extent)),
+            count: _hourCount,
+            selectedIndex: _displayHour(_draft) - _firstHour,
+            label: hours,
+            text: (index) => _hourText(messages, index + _firstHour),
+            onChanged: (index) => _selectHour(index + _firstHour),
+            extent: extent,
+            touch: touch,
+          ),
+        ),
+        if (!touch) VerticalDivider(width: 1, thickness: 1, color: theme.line),
+        Expanded(
+          child: _TimeChoices(
+            key: ValueKey(('minutes', touch, extent)),
+            count: 60,
+            selectedIndex: _draft.minute,
+            label: minutes,
+            text: (index) => _minuteText(messages, index),
+            onChanged: _selectMinute,
+            extent: extent,
+            touch: touch,
+          ),
+        ),
+      ],
+    );
+    final accent = theme.visuals.status(YumeiroStatusRole.accent);
+    final readout = theme.visuals.surface(YumeiroSurfaceRole.readout);
+    return YumeiroVisualSurface(
+      role: YumeiroSurfaceRole.inset,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: touch ? 28 : 26),
+            child: Row(children: [label(hours), label(minutes)]),
+          ),
+          SizedBox(
+            height: extent * (touch ? 5 : 6),
+            child: touch
+                ? Stack(
+                    alignment: Alignment.center,
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned(
+                        left: theme.spacing.sm,
+                        right: theme.spacing.sm,
+                        top: extent * 2,
+                        height: extent,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              color: accent.subtleFill,
+                              shape: readout.shape.copyWith(
+                                side: BorderSide(
+                                  color: accent.foreground.withValues(
+                                    alpha: .25,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      columns,
+                      IgnorePointer(
+                        child: ExcludeSemantics(
+                          child: Center(
+                            child: Text(
+                              _separator,
+                              style: theme.typography.mono(
+                                fontSize: 18,
+                                fontWeight: theme.typography.emphasisWeight,
+                                color: theme.muted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : columns,
+          ),
+        ],
       ),
     );
   }
@@ -207,13 +463,9 @@ class _TimePickerPanelState extends State<_TimePickerPanel> {
     final title = _inputMode
         ? messages.timePickerInputHelpText
         : messages.timePickerDialHelpText;
-    final formattedTime = messages.formatTimeOfDay(
-      _draft,
-      alwaysUse24HourFormat: widget.alwaysUse24HourFormat,
-    );
     final toggle = _canSwitch
         ? YumeiroButton(
-            icon: _inputMode ? Icons.schedule_outlined : Icons.edit_outlined,
+            icon: _inputMode ? Icons.schedule_outlined : theme.icons.edit,
             variant: YumeiroButtonVariant.ghost,
             tooltip: _inputMode
                 ? messages.timePickerDialHelpText
@@ -231,53 +483,17 @@ class _TimePickerPanelState extends State<_TimePickerPanel> {
       label: messages.okButtonLabel,
       onPressed: _confirm,
     );
-    final numberStyle = theme.typography.control(monospace: true);
-    final extent = math.max(
-      metrics.denseTargetSize,
-      MediaQuery.textScalerOf(context).scale(numberStyle.fontSize!) *
-              (numberStyle.height ?? 1.2) +
-          theme.spacing.xs,
-    );
     final body = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: theme.spacing.sm,
       children: [
-        if (_showFields)
-          YumeiroFieldLayout(
-            errorText: _showError ? messages.invalidTimeLabel : null,
-            child: Row(
-              spacing: theme.spacing.xs,
-              children: [
-                Expanded(child: _numberField(isHour: true, messages: messages)),
-                Text(switch (_format) {
-                  TimeOfDayFormat.HH_dot_mm => '.',
-                  TimeOfDayFormat.frenchCanadian => 'h',
-                  _ => ':',
-                }),
-                Expanded(
-                  child: _numberField(isHour: false, messages: messages),
-                ),
-              ],
-            ),
-          )
-        else if (_canSwitch)
-          YumeiroButton(
-            label: formattedTime,
-            tooltip: messages.inputTimeModeButtonLabel,
-            onPressed: _switchMode,
-          )
+        if (_showFields || !widget.touch)
+          _numberReadouts(context, messages)
         else
-          YumeiroVisualSurface(
-            role: YumeiroSurfaceRole.readout,
-            padding: EdgeInsets.all(theme.spacing.sm),
-            child: Center(
-              child: Text(formattedTime, style: theme.typography.title),
-            ),
-          ),
+          _touchReadout(context, messages),
         if (!_use24Hours)
           YumeiroSegmentedControl<DayPeriod>(
-            dense: !widget.touch,
             expand: true,
             value: _draft.period,
             onChanged: _setPeriod,
@@ -292,74 +508,65 @@ class _TimePickerPanelState extends State<_TimePickerPanel> {
               ),
             ],
           ),
-        if (!_inputMode)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: theme.spacing.sm,
-            children: [
-              Expanded(
-                child: _TimeChoices(
-                  key: ValueKey(('hours', _hourCount)),
-                  count: _hourCount,
-                  selectedIndex: _displayHour(_draft) - _firstHour,
-                  label: messages.timePickerHourLabel,
-                  text: (index) => _hourText(messages, index + _firstHour),
-                  onChanged: (index) => _selectHour(index + _firstHour),
-                  extent: extent,
-                  touch: widget.touch,
-                ),
-              ),
-              Expanded(
-                child: _TimeChoices(
-                  count: 60,
-                  selectedIndex: _draft.minute,
-                  label: messages.timePickerMinuteLabel,
-                  text: (index) => _minuteText(messages, index),
-                  onChanged: _selectMinute,
-                  extent: extent,
-                  touch: widget.touch,
-                ),
-              ),
-            ],
-          ),
+        if (!_inputMode) _choices(context, messages),
       ],
     );
     if (widget.touch) {
-      return YumeiroBottomSheet(
+      return buildYumeiroPickerSheet(
         title: title,
         anchor: widget.anchor,
-        maxWidth: 392,
-        minAnchoredHeight: _inputMode ? 260 : 370,
+        maxWidth: 360,
+        minAnchoredHeight: _inputMode ? 260 : 460,
+        headerActions: [?toggle],
         actions: [cancel, confirm],
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_inputMode && toggle != null)
-              Align(alignment: AlignmentDirectional.centerEnd, child: toggle),
-            body,
-          ],
-        ),
+        child: body,
       );
     }
     return YumeiroScrollView(
-      padding: EdgeInsets.all(theme.spacing.xs),
+      padding: EdgeInsets.fromLTRB(
+        theme.spacing.md,
+        0,
+        theme.spacing.md,
+        theme.spacing.xs,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: theme.spacing.sm,
+        spacing: theme.spacing.xs,
         children: [
-          YumeiroPageHeader.compact(
-            title: title,
-            namesRoute: true,
-            actions: [?toggle],
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: theme.line)),
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: metrics.minTargetSize),
+              child: Row(
+                spacing: theme.spacing.xs,
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      container: true,
+                      namesRoute: true,
+                      child: Text(title, style: theme.typography.title),
+                    ),
+                  ),
+                  ?toggle,
+                ],
+              ),
+            ),
           ),
           body,
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: theme.spacing.sm,
-            runSpacing: theme.spacing.xs,
-            children: [cancel, confirm],
+          Container(
+            padding: EdgeInsets.only(top: theme.spacing.sm),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: theme.line)),
+            ),
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: theme.spacing.sm,
+              runSpacing: theme.spacing.xs,
+              children: [cancel, confirm],
+            ),
           ),
         ],
       ),
@@ -436,65 +643,87 @@ class _TimeChoicesState extends State<_TimeChoices> {
   @override
   Widget build(BuildContext context) {
     final theme = YumeiroTheme.of(context);
-    final style = theme.typography.control(monospace: true);
-    Widget? choice(BuildContext context, int index) =>
-        YumeiroInteractiveVisualSurface(
-          role: YumeiroItemRole.selection,
-          selected: widget.selectedIndex == index,
+    Widget choice(BuildContext context, int index) {
+      final distance = (index - widget.selectedIndex).abs();
+      final selected = distance == 0;
+      final text = widget.text(index);
+      final style = theme.typography.mono(
+        fontSize: widget.touch
+            ? switch (distance) {
+                0 => 20,
+                1 => 16,
+                _ => 14,
+              }
+            : 13,
+        fontWeight: selected
+            ? theme.typography.emphasisWeight
+            : theme.typography.bodyWeight,
+      );
+      return Semantics(
+        button: true,
+        selected: selected,
+        label: '${widget.label} $text',
+        child: YumeiroInteractiveVisualSurface(
+          role: selected && !widget.touch
+              ? YumeiroControlRole.primary
+              : YumeiroItemRole.selection,
+          // The touch wheels share a single selection surface behind the rows.
+          visualOverride: widget.touch
+              ? const YumeiroVisualOverride(
+                  base: YumeiroVisualDelta(
+                    fillOpacity: 0,
+                    outline: BorderSide.none,
+                    effects: YumeiroEffectStack.none,
+                  ),
+                )
+              : null,
+          visualInsets: widget.touch
+              ? null
+              : const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          selected: selected,
           onTap: () => widget.onChanged(index),
           child: Center(
-            child: Semantics(
-              label: '${widget.label} ${widget.text(index)}',
-              excludeSemantics: true,
+            child: ExcludeSemantics(
               child: Builder(
                 builder: (context) => Text(
-                  widget.text(index),
+                  text,
                   style: style.copyWith(
-                    color: DefaultTextStyle.of(context).style.color,
+                    color: widget.touch
+                        ? switch (distance) {
+                            0 => theme.text,
+                            1 => theme.muted,
+                            _ => theme.subtle,
+                          }
+                        : DefaultTextStyle.of(context).style.color,
                   ),
                 ),
               ),
             ),
           ),
-        );
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: theme.spacing.xs,
-      children: [
-        ExcludeSemantics(
-          child: Text(
-            widget.label,
-            style: theme.typography.supporting.copyWith(color: theme.muted),
-            textAlign: TextAlign.center,
-          ),
         ),
-        YumeiroVisualSurface(
-          role: YumeiroSurfaceRole.inset,
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            height: widget.extent * (widget.touch ? 3 : 5),
-            child: widget.touch
-                ? ListWheelScrollView.useDelegate(
-                    key: ValueKey(widget.label),
-                    controller: _controller,
-                    itemExtent: widget.extent,
-                    physics: const FixedExtentScrollPhysics(),
-                    onSelectedItemChanged: widget.onChanged,
-                    childDelegate: ListWheelChildBuilderDelegate(
-                      childCount: widget.count,
-                      builder: choice,
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _controller,
-                    itemExtent: widget.extent,
-                    itemCount: widget.count,
-                    itemBuilder: choice,
-                  ),
-          ),
-        ),
-      ],
-    );
+      );
+    }
+
+    return widget.touch
+        ? ListWheelScrollView.useDelegate(
+            key: ValueKey(widget.label),
+            controller: _controller,
+            itemExtent: widget.extent,
+            diameterRatio: 4,
+            perspective: .001,
+            physics: const FixedExtentScrollPhysics(),
+            onSelectedItemChanged: widget.onChanged,
+            childDelegate: ListWheelChildBuilderDelegate(
+              childCount: widget.count,
+              builder: choice,
+            ),
+          )
+        : ListView.builder(
+            padding: EdgeInsets.zero,
+            controller: _controller,
+            itemExtent: widget.extent,
+            itemCount: widget.count,
+            itemBuilder: choice,
+          );
   }
 }

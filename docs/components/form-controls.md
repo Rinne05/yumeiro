@@ -24,6 +24,8 @@
 
 `required` 提供必填标记。要求用户同意时，用 `validator` 检查值是否为 `true`。复选字段启用 `tristate` 后，`null` 表示混合态。开关字段使用 `true` 或 `false`。
 
+设置 `enabled: false` 会在复选框或开关滑块上显示禁用斜线。禁用的已选复选框和混合复选框使用相同的底色与斜线，读屏仍可区分两种值。设置 `readOnly: true` 会显示通常的状态标记，并可用键盘聚焦查看。
+
 ```dart
 YumeiroCheckbox.form(
   label: '我同意服务条款',
@@ -65,9 +67,36 @@ Widget buildAssigneeField(
 | <ApiLink symbol="YumeiroTimePicker" /> / <ApiLink symbol="YumeiroTimePicker.form" /> | `TimeOfDay` | 用 `initialPickerTime` 指定尚未选值时的起始时间。 |
 | <ApiLink symbol="YumeiroDateRangePicker" /> / <ApiLink symbol="YumeiroDateRangePicker.form" /> | `DateTimeRange<DateTime>` | 设置起止边界，或通过 `selectableDayPredicate` 约束可选的起止日期。 |
 
-三个字段在指针模式打开锚定浮层，在窄屏触控模式打开底部面板。指针浮层周边空间不足时在视口内居中。日期和范围共用可翻月、跳转和手动输入的日历。日期范围在上方显示起止值，空间充足时并排显示两个月。时间可以直接输入时、分，也可以用指针列表或触控滚动列选择。读数跟随应用的本地化和 12／24 小时配置。
+三个字段在指针模式打开锚定浮层，在窄屏触控模式打开底部面板。指针浮层周边空间不足时在视口内居中。面板操作按钮使用主题的标准尺寸，单日期的月份标题与导航空间不足时分行显示。日期和范围使用固定六行的月视图，支持翻月和跳转年份，日期数字保留较小字号。今天用描边标记，已选日期带有主色填充。日期范围在上方显示起止值，空间充足时并排显示两个月。
 
-时间选择器通过 `initialEntryMode` 设置初始界面。<ApiLink symbol="YumeiroTimePickerEntryMode" /> 的 `list`（默认）和 `input` 分别从列表和文本框打开，并允许切换。`listOnly` 和 `inputOnly` 只提供指定的输入方式。
+### 设置打开时的界面
+
+三个选择器的独立构造器和 `.form()` 都接受 `initialEntryMode`。该参数指定每次打开时的界面以及可用的输入方式。允许切换时，用户可通过面板顶部的按钮切换。
+
+| 入口 | 可切换模式 | 固定模式 |
+| --- | --- | --- |
+| 日期与日期范围的 Flutter `DatePickerEntryMode` | `calendar`（默认）打开月历，`input` 打开文本输入。 | `calendarOnly` 仅月历，`inputOnly` 仅文本输入。 |
+| 时间的 <ApiLink symbol="YumeiroTimePickerEntryMode" /> | `list`（默认）打开时间选项，`input` 打开文本输入。 | `listOnly` 仅时间选项，`inputOnly` 仅文本输入。 |
+
+时间选项在指针模式下是并排的时、分列表。默认 `list` 模式还可直接编辑列表上方的读数。在触控模式下，选项为两列滚轮，中间一行标记所选时间。允许切换时，触控用户也可点击时间读数进入手动输入。时间显示跟随应用的本地化和 12／24 小时设置。
+
+```dart
+Widget buildScheduleFields() => Column(
+  children: [
+    YumeiroDatePicker.form(
+      firstDate: DateTime(2026, 1, 1),
+      lastDate: DateTime(2026, 12, 31),
+      initialEntryMode: DatePickerEntryMode.input,
+    ),
+    YumeiroTimePicker.form(
+      initialEntryMode: YumeiroTimePickerEntryMode.inputOnly,
+      initialPickerTime: const TimeOfDay(hour: 9, minute: 0),
+    ),
+  ],
+);
+```
+
+`initialPickerTime` 只给空时间字段设定面板打开时的起始时间，确认后才写入字段。日期和日期范围可用 `currentDate` 指定标记为「今天」的日期，默认使用当天。
 
 独立组件通过 `value` 和 `onChanged` 接入宿主状态。日期和范围的端点按年、月、日处理，应用负责将日历日期映射到业务时区或具体时刻。面板中的编辑在确认后写回，取消选择保留旧值。开启 `clearable` 后，可用独立按钮清空为 `null`。字段很窄时会预留独立一行放置清除按钮。要在嵌套路由中打开选择器，设 `useRootNavigator: false`。
 

@@ -37,6 +37,9 @@ class YumeiroMenuAction extends YumeiroMenuEntry {
 
   /// The callback for an enabled action. An action with no callback is disabled.
   final VoidCallback? onPressed;
+
+  /// Controls availability. Disabled selectable actions mark their state with
+  /// a slash.
   final bool enabled;
   final bool destructive;
 

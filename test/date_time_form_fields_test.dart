@@ -202,7 +202,7 @@ void main() {
     (YumeiroThemePresets.classicDark, false),
     (YumeiroThemePresets.pixelDark, true),
   ]) {
-    testWidgets('${preset.id} centers a themed background on today', (
+    testWidgets('${preset.id} centers a themed outline on today', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -235,22 +235,34 @@ void main() {
 
       ShapeDecoration decoration() =>
           tester.widget<DecoratedBox>(marker).decoration as ShapeDecoration;
-      final shape = decoration().shape;
+      final shape = decoration().shape as OutlinedBorder;
+      final theme = YumeiroTheme.of(tester.element(day));
       if (pixel) {
         expect(shape, isA<YumeiroPixelBorder>());
       } else {
+        final compactShape =
+            theme.visuals.surface(YumeiroSurfaceRole.compact).shape
+                as RoundedRectangleBorder;
         expect(
-          (shape as RoundedRectangleBorder).borderRadius
-              .resolve(TextDirection.ltr)
-              .topLeft
-              .x,
-          greaterThanOrEqualTo(size.width / 2),
+          (shape as RoundedRectangleBorder).borderRadius,
+          compactShape.borderRadius * 2,
         );
       }
-      final unselectedColor = decoration().color;
+      expect(decoration().color, isNull);
+      expect(shape.side.width, 1.5);
+      expect(
+        shape.side.color,
+        theme.visuals.status(YumeiroStatusRole.accent).foreground,
+      );
       await tester.tap(day);
       await tester.pumpAndSettle();
-      expect(decoration().color, isNot(unselectedColor));
+      expect(decoration().color, isNull);
+      expect(
+        (decoration().shape as OutlinedBorder).side.color,
+        theme.visuals.control(YumeiroControlRole.primary, const {
+          WidgetState.selected,
+        }).foreground,
+      );
       expect(
         (tester.getCenter(marker) - tester.getCenter(day)).distance,
         closeTo(0, .01),
@@ -291,6 +303,21 @@ void main() {
       await _open(tester, 'Pick date');
       final calendar = _day(2027, 1, 14);
       expect(calendar, findsOneWidget);
+      final target = YumeiroModalityScope.metricsOf(tester.element(calendar))
+          .minTargetSize;
+      expect(tester.getSize(calendar).height, target);
+      expect(
+        tester.getSize(
+          find.byKey(const ValueKey('yumeiro-calendar-next-month')),
+        ),
+        Size.square(target),
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('yumeiro-calendar-confirm')))
+            .height,
+        target,
+      );
       expect(find.byType(DatePickerDialog), findsNothing);
       expect(
         find.byType(YumeiroBottomSheet),
@@ -298,9 +325,12 @@ void main() {
       );
       await tester.tap(_day(2027, 1, 16));
       await tester.pump();
+      final selectedDate = DateTime(2027, 1, 16);
+      final messages = MaterialLocalizations.of(tester.element(calendar));
+      expect(find.text(messages.formatCompactDate(selectedDate)), findsNothing);
       await tester.tap(find.text('OK').hitTestable());
       await tester.pumpAndSettle();
-      expect(changes, [DateTime(2027, 1, 16)]);
+      expect(changes, [selectedDate]);
       expect(find.text('Pick date'), findsOneWidget);
 
       await _open(tester, 'Pick date');
@@ -421,6 +451,54 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     }
+  });
+
+  testWidgets('narrow pointer calendar wraps full-size month actions', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(220, 568);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      _page(
+        YumeiroDatePicker(
+          firstDate: DateTime(2027),
+          lastDate: DateTime(2027, 12, 31),
+          currentDate: DateTime(2027, 11, 14),
+          placeholder: 'Pick date',
+          value: null,
+          onChanged: (_) {},
+        ),
+      ),
+    );
+
+    await _open(tester, 'Pick date');
+    final dayContext = tester.element(_day(2027, 11, 14));
+    final messages = MaterialLocalizations.of(dayContext);
+    final title = find.widgetWithText(
+      YumeiroButton,
+      messages.formatMonthYear(DateTime(2027, 11)),
+    );
+    final next = find.byTooltip(messages.nextMonthTooltip);
+    final toggle = find.byTooltip(messages.inputDateModeButtonLabel);
+    final target = YumeiroModalityScope.metricsOf(dayContext).minTargetSize;
+    expect(
+      tester.getBottomLeft(title).dy,
+      lessThan(tester.getTopLeft(next).dy),
+    );
+    expect(tester.getSize(next), Size.square(target));
+    expect(tester.getSize(toggle), Size.square(target));
+
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    expect(_day(2027, 12, 14), findsOneWidget);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('yumeiro-calendar-input-start')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('forced errors take precedence over automatic validation', (
@@ -561,6 +639,16 @@ void main() {
     expect(MediaQuery.alwaysUse24HourFormatOf(tester.element(hour)), isTrue);
     expect(key.currentState!.value, isNull);
 
+    final metrics = YumeiroModalityScope.metricsOf(tester.element(hour));
+    final confirm = find.ancestor(
+      of: find.text('OK'),
+      matching: find.byType(YumeiroButton),
+    );
+    expect(tester.getSize(confirm).height, metrics.minTargetSize);
+    expect(
+      tester.getSize(find.byType(ListView).first).height,
+      6 * metrics.minTargetSize,
+    );
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(changes, [seed]);
@@ -601,9 +689,7 @@ void main() {
     ]);
   });
 
-  testWidgets('range summary text follows the active endpoint surface', (
-    tester,
-  ) async {
+  testWidgets('range summary outlines its active endpoint', (tester) async {
     final range = DateTimeRange(
       start: DateTime(2027, 1, 30),
       end: DateTime(2027, 2, 3),
@@ -626,30 +712,32 @@ void main() {
     await _open(tester, '$start – $end');
 
     final visuals = YumeiroTheme.of(context).visuals;
-    final idle = visuals
-        .control(YumeiroControlRole.neutral, const {})
-        .foreground;
-    final active = visuals.control(YumeiroControlRole.neutral, const {
-      WidgetState.selected,
-    }).foreground;
-    expect(active, isNot(idle));
+    final inset = visuals.surface(YumeiroSurfaceRole.inset);
+    final accent = visuals.status(YumeiroStatusRole.accent).foreground;
 
-    void expectEndpointColors({required bool startActive}) {
-      final startColor = startActive ? active : idle;
-      final endColor = startActive ? idle : active;
-      expect(
-        _renderedTextColor(tester, messages.dateRangeStartLabel),
-        startColor,
+    void expectEndpoint(String label, String date, {required bool active}) {
+      final text = find.text(label);
+      final endpoint = tester.widget<YumeiroInteractiveVisualSurface>(
+        find.ancestor(
+          of: text,
+          matching: find.byType(YumeiroInteractiveVisualSurface),
+        ),
       );
-      expect(_renderedTextColor(tester, start), startColor);
-      expect(_renderedTextColor(tester, messages.dateRangeEndLabel), endColor);
-      expect(_renderedTextColor(tester, end), endColor);
+      final resolved = visuals.resolveRole(endpoint.role, {
+        if (endpoint.selected) WidgetState.selected,
+      }, endpoint.visualOverride);
+      expect(endpoint.selected, active);
+      expect(resolved.outline.color, active ? accent : inset.outline.color);
+      expect(_renderedTextColor(tester, label), inset.foreground);
+      expect(_renderedTextColor(tester, date), inset.foreground);
     }
 
-    expectEndpointColors(startActive: true);
+    expectEndpoint(messages.dateRangeStartLabel, start, active: true);
+    expectEndpoint(messages.dateRangeEndLabel, end, active: false);
     await tester.tap(find.text(messages.dateRangeEndLabel));
     await tester.pumpAndSettle();
-    expectEndpointColors(startActive: false);
+    expectEndpoint(messages.dateRangeStartLabel, start, active: false);
+    expectEndpoint(messages.dateRangeEndLabel, end, active: true);
   });
 
   testWidgets('time choice numbers follow the selected and idle surfaces', (
@@ -677,20 +765,23 @@ void main() {
       findsNothing,
     );
     final visuals = YumeiroTheme.of(context).visuals;
-    final active = visuals.item(YumeiroItemRole.selection, const {
+    final active = visuals.control(YumeiroControlRole.primary, const {
       WidgetState.selected,
     }).foreground;
     final idle = visuals.item(YumeiroItemRole.selection, const {}).foreground;
     expect(active, isNot(idle));
-    expect(_renderedTextColor(tester, '14'), active);
-    expect(_renderedTextColor(tester, '30'), active);
-    expect(_renderedTextColor(tester, '15'), idle);
-    expect(_renderedTextColor(tester, '31'), idle);
+    final lists = find.byType(ListView);
+    Color? choiceColor(String number) =>
+        _renderedTextColor(tester, number, within: lists);
+    expect(choiceColor('14'), active);
+    expect(choiceColor('30'), active);
+    expect(choiceColor('15'), idle);
+    expect(choiceColor('31'), idle);
 
     await tester.tap(find.text('15'));
     await tester.pumpAndSettle();
-    expect(_renderedTextColor(tester, '14'), idle);
-    expect(_renderedTextColor(tester, '15'), active);
+    expect(choiceColor('14'), idle);
+    expect(choiceColor('15'), active);
   });
 
   testWidgets('typed 12-hour time validates both fields', (tester) async {
@@ -742,6 +833,28 @@ void main() {
     );
     await _open(tester, 'Pick time');
     expect(find.byType(YumeiroBottomSheet), findsOneWidget);
+    final messages = MaterialLocalizations.of(
+      tester.element(find.byType(YumeiroTimePicker)),
+    );
+    final editInHeader = find.byWidgetPredicate(
+      (widget) =>
+          widget is YumeiroButton &&
+          widget.tooltip == messages.inputTimeModeButtonLabel,
+    );
+    expect(editInHeader, findsOneWidget);
+    expect(find.byTooltip(messages.inputTimeModeButtonLabel), findsOneWidget);
+    await tester.tap(editInHeader);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('yumeiro-time-hour')), findsOneWidget);
+    expect(changes, isEmpty);
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is YumeiroButton &&
+            widget.tooltip == messages.timePickerDialHelpText,
+      ),
+    );
+    await tester.pumpAndSettle();
     final wheels = find.byType(ListWheelScrollView);
     expect(wheels, findsNWidgets(2));
     await tester.tap(
@@ -857,13 +970,19 @@ Finder _day(int year, int month, int day) =>
 YumeiroButton _confirmedDateButton(WidgetTester tester) =>
     tester.widget(find.byKey(const ValueKey('yumeiro-calendar-confirm')));
 
-Color? _renderedTextColor(WidgetTester tester, String text) => tester
-    .widget<RichText>(
-      find.descendant(of: find.text(text), matching: find.byType(RichText)),
-    )
-    .text
-    .style
-    ?.color;
+Color? _renderedTextColor(WidgetTester tester, String text, {Finder? within}) {
+  final target = find.text(text);
+  final label = within == null
+      ? target
+      : find.descendant(of: within, matching: target);
+  return tester
+      .widget<RichText>(
+        find.descendant(of: label, matching: find.byType(RichText)),
+      )
+      .text
+      .style
+      ?.color;
+}
 
 Widget _page(
   Widget child, {

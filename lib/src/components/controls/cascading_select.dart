@@ -16,6 +16,8 @@ import '../overlays/sheets.dart';
 import '../overlays/tooltip.dart';
 import 'buttons.dart';
 import 'select_trigger.dart';
+import 'selection_appearance.dart';
+import 'selection_control.dart';
 
 /// Sibling IDs must be unique. Only leaves carry values; branches only navigate.
 @immutable
@@ -43,7 +45,8 @@ class YumeiroCascadingOption<T extends Object> {
   /// Leaf value returned on selection. Branches have no value.
   final T? value;
 
-  /// Whether this node can be selected or entered.
+  /// Whether this node can be selected or entered. Disabled nodes show a
+  /// slashed marker in their row.
   final bool enabled;
   final List<YumeiroCascadingOption<T>> children;
 }
@@ -507,6 +510,12 @@ class _YumeiroCascadingSelectionState<T extends Object>
                           role: YumeiroItemRole.standard,
                           autofocus: identical(option, initialFocus),
                           selected: active || selected,
+                          visualOverride: option.enabled
+                              ? null
+                              : unavailableSelectionVisualOverride(
+                                  rowContext,
+                                  YumeiroItemRole.standard,
+                                ),
                           onTap: option.enabled
                               ? () => _choose(option, level)
                               : null,
@@ -540,7 +549,12 @@ class _YumeiroCascadingSelectionState<T extends Object>
                                     ],
                                   ),
                                 ),
-                                if (branch)
+                                if (!option.enabled)
+                                  UnavailableSelectionMark(
+                                    size: theme.iconSizes.sm,
+                                    selected: selected,
+                                  )
+                                else if (branch)
                                   Icon(
                                     rtl
                                         ? theme.icons.chevronLeft

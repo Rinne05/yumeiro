@@ -6,63 +6,96 @@ import 'package:yumeiro/yumeiro.dart';
 void main() {
   for (final modality in YumeiroModality.values) {
     testWidgets(
-      'pagination matches standard button sizing in ${modality.name}',
+      'pagination uses standard button sizing and theme fonts in ${modality.name}',
       (tester) async {
         await tester.pumpWidget(
           _host(
-            Builder(
-              builder: (context) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  YumeiroButton(
-                    icon: YumeiroTheme.iconsOf(context).chevronLeft,
-                    tooltip: 'Standard back button',
-                    variant: YumeiroButtonVariant.ghost,
-                    onPressed: () {},
-                  ),
-                  const YumeiroPagination(
-                    pageIndex: 4,
-                    pageCount: 24,
-                    variant: YumeiroPaginationVariant.numbered,
-                    onChanged: _ignorePage,
-                  ),
-                  const YumeiroPagination(
-                    pageIndex: 4,
-                    pageCount: 24,
-                    variant: YumeiroPaginationVariant.compact,
-                    onChanged: _ignorePage,
-                  ),
-                ],
-              ),
+            const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                YumeiroButton(
+                  icon: Icons.chevron_left,
+                  tooltip: 'Standard back button',
+                  variant: YumeiroButtonVariant.ghost,
+                  onPressed: _doNothing,
+                ),
+                YumeiroPagination(
+                  pageIndex: 4,
+                  pageCount: 24,
+                  variant: YumeiroPaginationVariant.numbered,
+                  onChanged: _ignorePage,
+                ),
+                YumeiroPagination(
+                  pageIndex: 4,
+                  pageCount: 24,
+                  variant: YumeiroPaginationVariant.compact,
+                  onChanged: _ignorePage,
+                ),
+              ],
             ),
             modality: modality,
           ),
         );
-        final standard = find.byTooltip('Standard back button');
-        final standardSize = tester.getSize(standard);
-        final standardIcon = tester.getSize(
-          find.descendant(of: standard, matching: find.byType(Icon)),
-        );
         final previous = find.byTooltip('Previous page');
         expect(previous, findsNWidgets(2));
+        final context = tester.element(previous.first);
+        final metrics = YumeiroModalityScope.metricsOf(context);
+        final standard = find.byTooltip('Standard back button');
+        final target = tester.getSize(standard);
+        final iconSize = tester.getSize(
+          find.descendant(of: standard, matching: find.byType(Icon)),
+        );
         for (var i = 0; i < 2; i++) {
-          expect(tester.getSize(previous.at(i)), standardSize);
+          final arrow = previous.at(i);
+          expect(tester.getSize(arrow), target);
           expect(
             tester.getSize(
-              find.descendant(of: previous.at(i), matching: find.byType(Icon)),
+              find.descendant(of: arrow, matching: find.byType(Icon)),
             ),
-            standardIcon,
+            iconSize,
           );
+          if (metrics.isTouch) {
+            final surface = tester.widget<YumeiroResolvedVisualSurface>(
+              find.descendant(
+                of: arrow,
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is YumeiroResolvedVisualSurface &&
+                      widget.visualInsets != null,
+                ),
+              ),
+            );
+            expect(
+              target.height - surface.visualInsets!.vertical,
+              metrics.controlHeight,
+            );
+          }
         }
         final page = find.ancestor(
           of: find.text('5'),
           matching: find.byType(YumeiroButton),
         );
-        expect(tester.getSize(page), standardSize);
+        expect(tester.getSize(page), target);
         expect(
-          tester.getSize(find.byTooltip('Go to page')).height,
-          standardSize.height,
+          tester.widget<YumeiroButton>(page).variant,
+          YumeiroButtonVariant.primary,
         );
+        final jump = find.byTooltip('Go to page');
+        expect(tester.getSize(jump).height, target.height);
+        expect(
+          _button(tester, find.text('5 / 24')).variant,
+          YumeiroButtonVariant.secondary,
+        );
+        final themeLabel = YumeiroTheme.of(context).typography.control();
+        for (final label in ['5', '5 / 24']) {
+          final text = tester.widget<Text>(find.text(label));
+          expect(text.style!.fontFamily, themeLabel.fontFamily);
+          expect(text.style!.fontFamilyFallback, themeLabel.fontFamilyFallback);
+          expect(
+            text.style!.fontFeatures,
+            contains(const FontFeature.tabularFigures()),
+          );
+        }
       },
     );
   }
@@ -158,6 +191,39 @@ void main() {
     await tester.tap(next);
     expect(requested, [5]);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('automatic layout stays stable across page windows', (
+    tester,
+  ) async {
+    final state = ValueNotifier((index: 0, width: 700.0));
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      _host(
+        ValueListenableBuilder(
+          valueListenable: state,
+          builder: (context, value, child) => SizedBox(
+            width: value.width,
+            child: YumeiroPagination(
+              pageIndex: value.index,
+              pageCount: 24,
+              onChanged: _ignorePage,
+            ),
+          ),
+        ),
+      ),
+    );
+    final width =
+        tester.getTopRight(find.byTooltip('Next page')).dx -
+        tester.getTopLeft(find.byTooltip('Previous page')).dx;
+
+    state.value = (index: 4, width: width - 1);
+    await tester.pumpAndSettle();
+    expect(find.text('5 / 24'), findsOneWidget);
+
+    state.value = (index: 0, width: width - 1);
+    await tester.pumpAndSettle();
+    expect(find.text('1 / 24'), findsOneWidget);
   });
 
   testWidgets('compact jump validates input and keeps cancellation inert', (
@@ -376,9 +442,42 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'compact pagination uses a passive readout when jump is unavailable',
+    (tester) async {
+      for (final count in [1, 3]) {
+        await tester.pumpWidget(
+          _host(
+            YumeiroPagination(
+              pageIndex: 0,
+              pageCount: count,
+              variant: YumeiroPaginationVariant.compact,
+              onChanged: count == 1 ? _ignorePage : null,
+            ),
+          ),
+        );
+        expect(find.byTooltip('Go to page'), findsNothing);
+        expect(find.bySemanticsLabel('Page 1 of $count'), findsOneWidget);
+        expect(
+          find.ancestor(
+            of: find.text('1 / $count'),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is YumeiroVisualSurface &&
+                  widget.role == YumeiroSurfaceRole.readout,
+            ),
+          ),
+          findsOneWidget,
+        );
+      }
+    },
+  );
 }
 
 void _ignorePage(int _) {}
+
+void _doNothing() {}
 
 Widget _host(
   Widget child, {

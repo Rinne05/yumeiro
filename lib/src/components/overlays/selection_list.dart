@@ -890,6 +890,7 @@ class _YumeiroSelectionListState<T> extends State<YumeiroSelectionList<T>> {
         option: item,
         selected: selected,
         enabled: _enabled && item.enabled,
+        disabledForItem: _editable && !item.enabled,
         readOnly: widget.readOnly,
         dense: widget.dense,
         multiple: widget.multiple,

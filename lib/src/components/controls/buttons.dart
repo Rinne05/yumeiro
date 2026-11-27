@@ -2,6 +2,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../../foundation/modality.dart';
+import '../../primitives/pixel_border.dart';
+import '../../primitives/pixel_circle.dart';
 import '../../primitives/visual_scope.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/semantic_visuals.dart';
@@ -319,6 +321,14 @@ class _YumeiroButtonState extends State<YumeiroButton> {
     }
 
     if (widget.badge) {
+      const diameter = 5.0;
+      final outline = BorderSide(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        width: 2,
+      );
+      final shape = theme.checkboxVisuals.shape is YumeiroPixelBorder
+          ? pixelCircleBorder(diameter).copyWith(side: outline)
+          : CircleBorder(side: outline);
       button = Stack(
         clipBehavior: Clip.none,
         children: [
@@ -327,15 +337,8 @@ class _YumeiroButtonState extends State<YumeiroButton> {
             right: 7,
             top: 7,
             child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: theme.accent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  width: 2,
-                ),
-              ),
-              child: const SizedBox(width: 5, height: 5),
+              decoration: ShapeDecoration(color: theme.accent, shape: shape),
+              child: const SizedBox.square(dimension: diameter),
             ),
           ),
         ],

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../../theme/semantic_visuals.dart';
 import '../../theme/theme.dart';
 import '../../theme/visual_role.dart';
 import '../controls/buttons.dart';
+import 'toast_obstruction.dart';
 
 /// Immutable content and lifetime of one hosted notification.
 @immutable
@@ -33,9 +35,10 @@ class YumeiroToastEntry {
   final YumeiroStatusRole statusRole;
   final IconData? icon;
 
-  /// Time before automatic removal from the host. Zero leaves it in the queue
-  /// until dismissed or displaced by newer entries. A host using accessible
-  /// navigation defers the countdown for notifications with a tap action.
+  /// Time before automatic removal from the host. Touch-only hosts count
+  /// time while this notification is in front. Zero leaves it in the queue
+  /// until dismissed or displaced by newer entries. Accessible navigation
+  /// defers the countdown for notifications with a tap action.
   final Duration duration;
   final int? maxLines;
   final bool copyOnTap;
@@ -43,20 +46,46 @@ class YumeiroToastEntry {
   final VoidCallback? onTap;
 
   bool get _hasAction => copyOnTap || onTap != null;
+
+  bool get _hasPriority {
+    if (duration <= Duration.zero || onTap != null) return true;
+    for (
+      YumeiroStatusRole? role = statusRole;
+      role != null;
+      role = role.fallback
+    ) {
+      if (role == YumeiroStatusRole.warning ||
+          role == YumeiroStatusRole.danger) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 /// Manages transient toast notifications for [YumeiroToastHost].
 class YumeiroToastController extends ChangeNotifier {
+  static const _capacity = 4;
+  static const _returnDuration = Duration(milliseconds: 1500);
   final List<YumeiroToastEntry> _entries = <YumeiroToastEntry>[];
-  final Map<int, Timer> _timers = <int, Timer>{};
-  final Set<Object> _accessibleNavigationHosts = <Object>{};
+  final _timers = <int, _ToastCountdown>{};
+  final _pausedDurations = <int, Duration>{};
+  final _hosts = <Object, ({bool touch, bool accessibleNavigation})>{};
+  int? _touchForegroundId;
   int _nextId = 1;
 
   List<YumeiroToastEntry> get entries =>
       List<YumeiroToastEntry>.unmodifiable(_entries);
 
+  // A pointer host still displays every entry even when a touch host shares
+  // its controller.
+  bool get _onlyTouchHosts =>
+      _hosts.isNotEmpty && _hosts.values.every((policy) => policy.touch);
+
   /// Adds a notification and returns the identifier accepted by [dismiss].
-  /// The host keeps up to four entries and removes the oldest when full.
+  /// The controller keeps up to four entries. When full, touch-only hosts
+  /// prefer to remove the oldest timed entry without an explicit tap action
+  /// or warning or danger status before removing a higher priority entry.
   int show({
     required String message,
     String? title,
@@ -81,46 +110,78 @@ class YumeiroToastController extends ChangeNotifier {
       copyText: copyText,
       onTap: onTap,
     );
-    _entries.add(entry);
-    if (_entries.length > 4) {
-      final oldest = _entries.removeAt(0);
-      _timers.remove(oldest.id)?.cancel();
+    if (_entries.length == _capacity) {
+      final firstOrdinary = _onlyTouchHosts
+          ? _entries.indexWhere((entry) => !entry._hasPriority)
+          : -1;
+      _removeAt(firstOrdinary < 0 ? 0 : firstOrdinary);
     }
-    _startTimer(entry);
+    _entries.add(entry);
+    _syncTimers();
     notifyListeners();
     return id;
   }
 
-  void _startTimer(YumeiroToastEntry entry) {
-    if (entry.duration <= Duration.zero ||
-        (entry._hasAction && _accessibleNavigationHosts.isNotEmpty)) {
-      return;
-    }
-    _timers[entry.id] = Timer(entry.duration, () => dismiss(entry.id));
+  void _setHostTimingPolicy(
+    Object host, {
+    required bool touch,
+    required bool accessibleNavigation,
+  }) {
+    final policy = (touch: touch, accessibleNavigation: accessibleNavigation);
+    if (_hosts[host] == policy) return;
+    _hosts[host] = policy;
+    _syncTimers();
   }
 
-  void _setAccessibleNavigation(Object host, bool enabled) {
-    final wasAccessible = _accessibleNavigationHosts.isNotEmpty;
-    if (enabled) {
-      _accessibleNavigationHosts.add(host);
-    } else {
-      _accessibleNavigationHosts.remove(host);
-    }
-    if (wasAccessible == _accessibleNavigationHosts.isNotEmpty) return;
-    for (final entry in _entries.where((entry) => entry._hasAction)) {
-      if (enabled) {
-        _timers.remove(entry.id)?.cancel();
+  void _removeHostTimingPolicy(Object host) {
+    if (_hosts.remove(host) != null) _syncTimers();
+  }
+
+  void _syncTimers() {
+    final previousForeground = _touchForegroundId;
+    final foreground = _onlyTouchHosts && _entries.isNotEmpty
+        ? _entries.last.id
+        : null;
+    final accessible = _hosts.values.any(
+      (policy) => policy.accessibleNavigation,
+    );
+    _touchForegroundId = foreground;
+
+    for (final entry in _entries) {
+      if (entry.duration <= Duration.zero) continue;
+      final id = entry.id;
+      if (foreground != null && id != foreground) {
+        final active = _timers.remove(id);
+        if (active != null || id == previousForeground) {
+          final remaining =
+              active?.pause() ?? _pausedDurations[id] ?? entry.duration;
+          _pausedDurations[id] = remaining < _returnDuration
+              ? _returnDuration
+              : remaining;
+        }
+      } else if (accessible && entry._hasAction) {
+        _timers.remove(id)?.cancel();
       } else {
-        _startTimer(entry);
+        _timers[id] ??= _ToastCountdown(
+          _pausedDurations.remove(id) ?? entry.duration,
+          () => dismiss(id),
+        );
       }
     }
   }
 
+  void _removeAt(int index) {
+    final entry = _entries.removeAt(index);
+    _timers.remove(entry.id)?.cancel();
+    _pausedDurations.remove(entry.id);
+  }
+
   void dismiss(int id) {
-    _timers.remove(id)?.cancel();
-    final before = _entries.length;
-    _entries.removeWhere((e) => e.id == id);
-    if (_entries.length != before) notifyListeners();
+    final index = _entries.indexWhere((entry) => entry.id == id);
+    if (index < 0) return;
+    _removeAt(index);
+    _syncTimers();
+    notifyListeners();
   }
 
   @override
@@ -129,8 +190,28 @@ class YumeiroToastController extends ChangeNotifier {
       timer.cancel();
     }
     _timers.clear();
-    _accessibleNavigationHosts.clear();
+    _pausedDurations.clear();
+    _hosts.clear();
     super.dispose();
+  }
+}
+
+class _ToastCountdown {
+  _ToastCountdown(this.duration, VoidCallback onElapsed)
+    : _timer = Timer(duration, onElapsed);
+
+  final Duration duration;
+  final Timer _timer;
+  final Stopwatch _elapsed = Stopwatch()..start();
+
+  Duration pause() {
+    cancel();
+    return duration - _elapsed.elapsed;
+  }
+
+  void cancel() {
+    _timer.cancel();
+    _elapsed.stop();
   }
 }
 
@@ -223,6 +304,7 @@ class YumeiroToastHost extends StatefulWidget {
 }
 
 class _YumeiroToastHostState extends State<YumeiroToastHost> {
+  late final _obstruction = ToastObstruction(context);
   YumeiroToastController? _ownedController;
   YumeiroToastController? _visibleController;
   // Presentation-only retention while removed entries finish their exit.
@@ -231,10 +313,20 @@ class _YumeiroToastHostState extends State<YumeiroToastHost> {
   YumeiroToastController get _controller =>
       widget.controller ?? (_ownedController ??= YumeiroToastController());
 
-  void _updateTimingPolicy() => _controller._setAccessibleNavigation(
-    this,
-    MediaQuery.maybeAccessibleNavigationOf(context) ?? false,
-  );
+  void _updateTimingPolicy() {
+    final touch =
+        YumeiroModalityScope.modalityOf(context) == YumeiroModality.touch;
+    final media = touch ? MediaQuery.maybeOf(context) : null;
+    _obstruction.updateMedia(media);
+    _controller._setHostTimingPolicy(
+      this,
+      touch: touch,
+      accessibleNavigation:
+          media?.accessibleNavigation ??
+          MediaQuery.maybeAccessibleNavigationOf(context) ??
+          false,
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -247,14 +339,15 @@ class _YumeiroToastHostState extends State<YumeiroToastHost> {
     super.didUpdateWidget(oldWidget);
     if (identical(oldWidget.controller, widget.controller)) return;
     final previousController = oldWidget.controller ?? _ownedController;
-    previousController?._setAccessibleNavigation(this, false);
+    previousController?._removeHostTimingPolicy(this);
     _updateTimingPolicy();
   }
 
   @override
   void dispose() {
-    widget.controller?._setAccessibleNavigation(this, false);
+    _controller._removeHostTimingPolicy(this);
     _ownedController?.dispose();
+    _obstruction.dispose();
     super.dispose();
   }
 
@@ -266,11 +359,19 @@ class _YumeiroToastHostState extends State<YumeiroToastHost> {
       child: Stack(
         fit: StackFit.passthrough,
         children: [
-          widget.child,
+          ToastObstructionScope(obstruction: _obstruction, child: widget.child),
           ListenableBuilder(
             listenable: controller,
             builder: (context, _) {
               final entries = controller.entries;
+              final isTouch =
+                  YumeiroModalityScope.modalityOf(context) ==
+                  YumeiroModality.touch;
+              if (isTouch) {
+                _visibleController = null;
+                _visibleEntries.clear();
+                return _buildTouch(context, controller, entries);
+              }
               if (!identical(_visibleController, controller)) {
                 _visibleController = controller;
                 _visibleEntries.clear();
@@ -283,18 +384,12 @@ class _YumeiroToastHostState extends State<YumeiroToastHost> {
               );
               if (_visibleEntries.isEmpty) return const SizedBox.shrink();
               final activeIds = entries.map((entry) => entry.id).toSet();
-              final modality = YumeiroModalityScope.modalityOf(context);
-              final isTouch = modality == YumeiroModality.touch;
-              final effectiveAlignment =
-                  widget.alignment ??
-                  (isTouch ? Alignment.bottomCenter : Alignment.topRight);
+              final effectiveAlignment = widget.alignment ?? Alignment.topRight;
               return SafeArea(
                 child: Align(
                   alignment: effectiveAlignment,
                   child: Padding(
-                    padding: isTouch
-                        ? const EdgeInsets.all(16)
-                        : const EdgeInsets.fromLTRB(24, 56, 24, 16),
+                    padding: const EdgeInsets.fromLTRB(24, 56, 24, 16),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 380),
                       child: SingleChildScrollView(
@@ -303,9 +398,7 @@ class _YumeiroToastHostState extends State<YumeiroToastHost> {
                         hitTestBehavior: HitTestBehavior.deferToChild,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: isTouch
-                              ? CrossAxisAlignment.stretch
-                              : CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             for (final entry in _visibleEntries) ...[
                               _AnimatedToastItem(
@@ -325,17 +418,7 @@ class _YumeiroToastHostState extends State<YumeiroToastHost> {
                                     MediaQuery.disableAnimationsOf(context)
                                     ? Duration.zero
                                     : YumeiroTheme.of(context).motion.normal,
-                                child: YumeiroToast(
-                                  message: entry.message,
-                                  title: entry.title,
-                                  statusRole: entry.statusRole,
-                                  icon: entry.icon,
-                                  maxLines: entry.maxLines,
-                                  copyOnTap: entry.copyOnTap,
-                                  copyText: entry.copyText,
-                                  onTap: entry.onTap,
-                                  onClose: () => controller.dismiss(entry.id),
-                                ),
+                                child: _hostedToast(controller, entry),
                               ),
                               const SizedBox(height: 8),
                             ],
@@ -350,6 +433,274 @@ class _YumeiroToastHostState extends State<YumeiroToastHost> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTouch(
+    BuildContext context,
+    YumeiroToastController controller,
+    List<YumeiroToastEntry> entries,
+  ) {
+    final alignment = (widget.alignment ?? Alignment.bottomCenter).resolve(
+      Directionality.of(context),
+    );
+    final media = MediaQuery.of(context);
+    final duration = media.disableAnimations
+        ? Duration.zero
+        : YumeiroTheme.of(context).motion.normal;
+    return ValueListenableBuilder(
+      valueListenable: _obstruction,
+      builder: (context, insets, _) => _TouchToastStack(
+        key: ObjectKey(controller),
+        controller: controller,
+        entries: entries,
+        alignment: alignment,
+        bottomInset: math.max(
+          widget.alignment == null ? insets.navigation : 0.0,
+          insets.system,
+        ),
+        duration: duration,
+      ),
+    );
+  }
+}
+
+YumeiroToast _hostedToast(
+  YumeiroToastController controller,
+  YumeiroToastEntry entry,
+) => YumeiroToast(
+  key: ValueKey(entry.id),
+  message: entry.message,
+  title: entry.title,
+  statusRole: entry.statusRole,
+  icon: entry.icon,
+  maxLines: entry.maxLines,
+  copyOnTap: entry.copyOnTap,
+  copyText: entry.copyText,
+  onTap: entry.onTap,
+  onClose: () => controller.dismiss(entry.id),
+);
+
+class _TouchToastStack extends StatefulWidget {
+  const _TouchToastStack({
+    super.key,
+    required this.controller,
+    required this.entries,
+    required this.alignment,
+    required this.bottomInset,
+    required this.duration,
+  });
+
+  final YumeiroToastController controller;
+  final List<YumeiroToastEntry> entries;
+  final Alignment alignment;
+  final double bottomInset;
+  final Duration duration;
+
+  bool get fromTop => alignment.y < 0;
+
+  @override
+  State<_TouchToastStack> createState() => _TouchToastStackState();
+}
+
+class _TouchToastStackState extends State<_TouchToastStack>
+    with SingleTickerProviderStateMixin {
+  static const _exitDuration = Duration(milliseconds: 150);
+  static const _edge = 6.0;
+
+  late final _transition = AnimationController(vsync: this, value: 1)
+    ..addStatusListener((status) {
+      if (status == AnimationStatus.completed && _outgoing != null) {
+        setState(() => _outgoing = null);
+      }
+    });
+  YumeiroToastEntry? _outgoing;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.entries.isNotEmpty) _startTransition();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TouchToastStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previous = oldWidget.entries.lastOrNull;
+    if (previous?.id != widget.entries.lastOrNull?.id) {
+      _outgoing =
+          previous != null &&
+              !widget.entries.any((entry) => entry.id == previous.id)
+          ? previous
+          : null;
+      _startTransition();
+    } else if (widget.duration == Duration.zero &&
+        oldWidget.duration != Duration.zero) {
+      _startTransition();
+    }
+  }
+
+  void _startTransition() {
+    if (widget.duration == Duration.zero) {
+      _outgoing = null;
+      _transition.value = 1;
+      return;
+    }
+    _transition.duration =
+        _outgoing != null &&
+            (widget.entries.isEmpty || widget.duration < _exitDuration)
+        ? _exitDuration
+        : widget.duration;
+    _transition.forward(from: 0);
+  }
+
+  double _elapsed(Duration duration) {
+    if (duration == Duration.zero || _transition.isCompleted) return 1;
+    final elapsed =
+        _transition.value * (_transition.duration?.inMicroseconds ?? 0);
+    return (elapsed / duration.inMicroseconds).clamp(0.0, 1.0);
+  }
+
+  Widget _animate(YumeiroToastEntry entry, {required bool leaving}) {
+    final direction = widget.fromTop ? -1.0 : 1.0;
+    return AnimatedBuilder(
+      key: ValueKey(entry.id),
+      animation: _transition,
+      child: _hostedToast(widget.controller, entry),
+      builder: (context, child) {
+        final animation = _elapsed(leaving ? _exitDuration : widget.duration);
+        final progress = leaving
+            ? Curves.easeInCubic.transform(animation)
+            : Curves.easeOutCubic.transform(animation);
+        final offset = leaving
+            ? 12 * progress
+            : (_outgoing == null ? 16 : -_edge) * (1 - progress);
+        return Opacity(
+          opacity: leaving ? 1 - progress : progress,
+          child: Transform.translate(
+            offset: Offset(0, offset * direction),
+            child: Transform.scale(
+              alignment: widget.fromTop
+                  ? Alignment.topCenter
+                  : Alignment.bottomCenter,
+              scale: leaving ? 1 : .96 + .04 * progress,
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _transition.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final front = widget.entries.lastOrNull;
+    final outgoing = _outgoing;
+    if (front == null && outgoing == null) return const SizedBox.shrink();
+    final leaving = outgoing == null
+        ? null
+        : ExcludeSemantics(
+            child: ExcludeFocus(
+              child: IgnorePointer(child: _animate(outgoing, leaving: true)),
+            ),
+          );
+    final cards = SingleChildScrollView(
+      primary: false,
+      reverse: !widget.fromTop,
+      hitTestBehavior: HitTestBehavior.deferToChild,
+      clipBehavior: Clip.none,
+      child: front == null ? leaving! : _buildStack(context, front, leaving),
+    );
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: widget.bottomInset),
+        child: ClipRect(
+          child: Align(
+            alignment: widget.alignment,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: SizedBox(width: double.infinity, child: cards),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStack(
+    BuildContext context,
+    YumeiroToastEntry front,
+    Widget? leaving,
+  ) {
+    final appearance = YumeiroTheme.of(context).visuals
+        .surface(YumeiroSurfaceRole.toast);
+    final shape = appearance.shape.copyWith(side: appearance.outline);
+    final foreground = _animate(front, leaving: false);
+    final above = !widget.fromTop;
+    final depth = math.min(2, widget.entries.length - 1).toDouble();
+    return TweenAnimationBuilder<double>(
+      duration: widget.duration,
+      tween: Tween(begin: 0, end: depth),
+      child: foreground,
+      builder: (context, visibleDepth, child) {
+        Widget edge(int level) {
+          final reveal = (visibleDepth - level + 1).clamp(0.0, 1.0);
+          final offset = _edge * level * reveal * (above ? -1 : 1);
+          final inset = 8.0 * level;
+          return Positioned(
+            key: ValueKey('yumeiro-toast-back-layer-$level'),
+            top: offset,
+            bottom: -offset,
+            left: inset,
+            right: inset,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: reveal * (level == 1 ? .85 : .65),
+                child: DecoratedBox(
+                  decoration: ShapeDecoration(
+                    color: appearance.background,
+                    shape: shape,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        final extension = _edge * visibleDepth;
+        return Padding(
+          padding: EdgeInsets.only(
+            top: above ? extension : 0,
+            bottom: above ? 0 : extension,
+          ),
+          child: Stack(
+            fit: StackFit.passthrough,
+            clipBehavior: Clip.none,
+            children: [
+              if (visibleDepth > 1) edge(2),
+              if (visibleDepth > 0) edge(1),
+              if (leaving != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: above ? null : 0,
+                  bottom: above ? 0 : null,
+                  child: leaving,
+                ),
+              child!,
+            ],
+          ),
+        );
+      },
     );
   }
 }

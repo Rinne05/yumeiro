@@ -147,8 +147,10 @@ class YumeiroDataTable<T> extends StatefulWidget {
   /// Keeps the sliver's header visible as its rows scroll past it.
   final bool pinnedHeader;
 
-  /// Supplied items in display order. Bulk selection covers eligible items
-  /// from this list, including items outside the viewport of a sliver.
+  /// Supplied items in their usual display order. The selection model can
+  /// move ineligible rows to the end through
+  /// [YumeiroTableSelection.moveDisabledToEnd]. Bulk selection covers
+  /// eligible items from this list, including rows outside a sliver viewport.
   final List<T> items;
 
   /// Defaults to row activation for standard tables and to selection for
@@ -183,6 +185,7 @@ class YumeiroDataTable<T> extends StatefulWidget {
   final String Function(T item)? rowSemanticsLabel;
 
   /// In touch mode, replaces the column layout with a custom row summary.
+  /// The index refers to the item's position in [items].
   /// An embedded [YumeiroDataRow] uses the table's padding by default.
   final Widget Function(BuildContext context, T item, int index)?
   compactRowBuilder;
@@ -212,15 +215,35 @@ class _YumeiroDataTableState<T> extends State<YumeiroDataTable<T>> {
     }
 
     final keys = buildTableRowKeys(widget.items, widget.rowKey);
+    final selectionModel = widget.selection;
     final selection = TableSelectionState.controlled(
-      selection: widget.selection,
+      selection: selectionModel,
       items: widget.items,
       keys: keys,
       includeBulkSelection: showHeader,
     );
+    List<int>? displayOrder;
+    if (selectionModel != null &&
+        selectionModel.moveDisabledToEnd &&
+        selectionModel.isItemEnabled != null) {
+      final enabled = <int>[];
+      final disabled = <int>[];
+      for (var index = 0; index < keys.length; index++) {
+        (selection.isItemEnabled(index) ? enabled : disabled).add(index);
+      }
+      if (enabled.isNotEmpty && disabled.isNotEmpty) {
+        displayOrder = enabled..addAll(disabled);
+      }
+    }
+    final displayKeys = displayOrder == null
+        ? keys
+        : [for (final index in displayOrder) keys[index]];
+    int sourceIndexFor(int displayIndex) =>
+        displayOrder?[displayIndex] ?? displayIndex;
+
     final tapBehavior =
         widget.rowTapBehavior ??
-        (compact && widget.selection != null
+        (compact && selectionModel != null
             ? YumeiroTableRowTapBehavior.select
             : YumeiroTableRowTapBehavior.activate);
     final showIndicator =
@@ -256,29 +279,39 @@ class _YumeiroDataTableState<T> extends State<YumeiroDataTable<T>> {
       final width = math.max(viewportWidth, layout.minimumWidth);
       final tracks = layout.resolve(width);
       final header = rows.buildHeader(context, tracks);
+      Widget buildRow(
+        BuildContext context,
+        int displayIndex, {
+        Widget Function(Widget)? fitRow,
+      }) => KeyedSubtree(
+        key: displayKeys[displayIndex],
+        child: rows.buildRow(
+          context,
+          tracks,
+          sourceIndexFor(displayIndex),
+          displayIndex: displayIndex,
+          fitRow: fitRow,
+          surface: fitRow == null ? null : flatRowSurface,
+        ),
+      );
+
       if (widget._sliver) {
-        final indices = {for (var i = 0; i < keys.length; i++) keys[i]: i};
+        final indices = {
+          for (var i = 0; i < displayKeys.length; i++) displayKeys[i]: i,
+        };
         return TableSliverViewport(
           viewportWidth: viewportWidth,
           contentWidth: width,
           header: header,
           pinnedHeader: widget.pinnedHeader,
-          sliverBuilder: (fitRow) => keys.isEmpty
+          sliverBuilder: (fitRow) => displayKeys.isEmpty
               ? SliverToBoxAdapter(child: rows.buildEmpty())
               : SliverList.builder(
                   addSemanticIndexes: false,
-                  itemCount: keys.length,
+                  itemCount: displayKeys.length,
                   findChildIndexCallback: (key) => indices[key],
-                  itemBuilder: (context, i) => KeyedSubtree(
-                    key: keys[i],
-                    child: rows.buildRow(
-                      context,
-                      tracks,
-                      i,
-                      fitRow: fitRow,
-                      surface: flatRowSurface,
-                    ),
-                  ),
+                  itemBuilder: (context, i) =>
+                      buildRow(context, i, fitRow: fitRow),
                 ),
         );
       }
@@ -295,14 +328,11 @@ class _YumeiroDataTableState<T> extends State<YumeiroDataTable<T>> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ?header,
-              if (keys.isEmpty)
+              if (displayKeys.isEmpty)
                 rows.buildEmpty()
               else
-                for (var i = 0; i < keys.length; i++)
-                  KeyedSubtree(
-                    key: keys[i],
-                    child: rows.buildRow(context, tracks, i),
-                  ),
+                for (var i = 0; i < displayKeys.length; i++)
+                  buildRow(context, i),
             ],
           ),
         ),
@@ -357,10 +387,11 @@ class _YumeiroDataTableState<T> extends State<YumeiroDataTable<T>> {
     final body = KeyedSubtree(key: _tableKey, child: viewport);
     if (!navigateRows) return body;
     return TableKeyboard(
-      rowKeys: keys,
-      toggleFor: selection.toggleFor,
+      rowKeys: displayKeys,
+      toggleFor: (displayIndex) =>
+          selection.toggleFor(sourceIndexFor(displayIndex)),
       rovingTabStop: !selectBody,
-      selectedKey: widget.selection!.selectedKeys.firstOrNull,
+      selectedKey: selectionModel!.selectedKeys.firstOrNull,
       child: body,
     );
   }

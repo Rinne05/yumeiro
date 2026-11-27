@@ -315,6 +315,7 @@ class _SelectionDemoState extends State<_SelectionDemo> {
   var _stationStatus = '尚未选择台站';
   bool? _sync;
   var _remember = true;
+  var _toggleControlsLocked = false;
   var _defaultQuality = false;
   var _view = '列表';
   var _profile = '均衡';
@@ -405,12 +406,20 @@ class _SelectionDemoState extends State<_SelectionDemo> {
   Widget _buildToggles() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      YumeiroCheckbox(
+        label: '禁用开关和复选框',
+        value: _toggleControlsLocked,
+        onChanged: (value) =>
+            setState(() => _toggleControlsLocked = value ?? false),
+      ),
       YumeiroSettingRow(
         title: '记住本次选择',
         trailing: YumeiroSwitch(
           semanticLabel: '记住本次选择',
           value: _remember,
-          onChanged: (value) => setState(() => _remember = value),
+          onChanged: _toggleControlsLocked
+              ? null
+              : (value) => setState(() => _remember = value),
         ),
       ),
       const SizedBox(height: 8),
@@ -422,6 +431,7 @@ class _SelectionDemoState extends State<_SelectionDemo> {
         },
         value: _sync,
         tristate: true,
+        enabled: !_toggleControlsLocked,
         onChanged: (value) => setState(() => _sync = value),
       ),
       const SizedBox(height: 8),
@@ -448,6 +458,7 @@ class _SelectionDemoState extends State<_SelectionDemo> {
         options: const [
           YumeiroSegmentOption(value: '均衡', label: '均衡', subtitle: '自动安排后台同步'),
           YumeiroSegmentOption(value: '省电', label: '省电', subtitle: '仅在应用打开时同步'),
+          YumeiroSegmentOption(value: '高性能', label: '高性能', enabled: false),
         ],
         onChanged: (value) => setState(() => _profile = value),
       ),

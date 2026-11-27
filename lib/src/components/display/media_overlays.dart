@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/localizations.dart';
+import '../../primitives/pixel_border.dart';
+import '../../primitives/pixel_circle.dart';
 import '../../primitives/visual_surface.dart';
 import '../../theme/semantic_visuals.dart';
 import '../../theme/theme.dart';
@@ -35,8 +37,12 @@ class YumeiroMediaPlayButton extends StatelessWidget {
         : YumeiroControlRole.overlay;
     final visualOverride = YumeiroVisualOverride(
       base: YumeiroVisualDelta(
-        shape: const CircleBorder(),
-        fill: !active && fillColor != null ? YumeiroSolidFill(fillColor!) : null,
+        shape: theme.checkboxVisuals.shape is YumeiroPixelBorder
+            ? pixelCircleBorder(size)
+            : const CircleBorder(),
+        fill: !active && fillColor != null
+            ? YumeiroSolidFill(fillColor!)
+            : null,
       ),
     );
 

@@ -2,7 +2,7 @@
 
 <ApiLink symbol="YumeiroColorPickerButton" /> 用于编辑主题、高亮或标签颜色。指针模式打开锚定的选色面板，触控模式打开模态面板。
 
-<ComponentDemo id="color-picker" title="自定义颜色与恢复继承预览" :overlay-height="470" input-modes compact-touch>
+<ComponentDemo id="color-picker" title="自定义颜色与恢复继承预览" :overlay-height="470" input-modes compact-touch theme-styles>
 
 <<< ../../example/lib/docs/controls_demos.dart#color-picker
 
@@ -35,5 +35,7 @@ YumeiroColorPickerButton(
 仅在结果改变时调用 `onChanged`。点击面板外关闭也会确认有效的十六进制编辑，因此，如果设置页另有「应用」与「取消」，应先把这些回调写到设置页的本地草稿。
 
 面板打开时，宿主更新 `value` 会同步光谱和十六进制输入。处于继承状态时，更新 `defaultColor` 也会刷新面板。
+
+色相和饱和度／亮度面板用圆环定位当前颜色。复古像素主题的圆环沿用像素滑块的阶梯轮廓。
 
 主题选项的构建和持久化见[主题指南](/guide/theming)。

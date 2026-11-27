@@ -6,6 +6,7 @@ class _InlineOption<T> extends StatefulWidget {
     required this.option,
     required this.selected,
     required this.enabled,
+    required this.disabledForItem,
     required this.readOnly,
     required this.dense,
     required this.multiple,
@@ -18,6 +19,7 @@ class _InlineOption<T> extends StatefulWidget {
   final YumeiroSelectionOption<T> option;
   final bool selected;
   final bool enabled;
+  final bool disabledForItem;
   final bool readOnly;
   final bool dense;
   final bool multiple;
@@ -98,6 +100,7 @@ class _InlineOptionState<T> extends State<_InlineOption<T>> {
                   selected: selected,
                   onToggle: _interactive ? widget.onPressed : null,
                   dense: widget.dense || metrics.isPointer,
+                  disabledForItem: widget.disabledForItem,
                 ),
               ),
             ),
@@ -122,7 +125,9 @@ class _InlineOptionState<T> extends State<_InlineOption<T>> {
                       maxLines: metrics.isTouch ? null : 2,
                       overflow: textOverflow,
                       style: theme.typography.supporting.copyWith(
-                        color: selected ? foreground : theme.muted,
+                        color: selected || widget.disabledForItem
+                            ? foreground
+                            : theme.muted,
                       ),
                     ),
                 ],
@@ -142,6 +147,9 @@ class _InlineOptionState<T> extends State<_InlineOption<T>> {
     final selected = group.groupValue == radioValue;
     final theme = YumeiroTheme.of(context);
     final scope = YumeiroVisualScope.maybeOf(context);
+    final visualOverride = widget.disabledForItem
+        ? unavailableSelectionVisualOverride(context, YumeiroItemRole.selection)
+        : scope?.visualOverride;
     return MergeSemantics(
       child: RawRadio<_SelectionOptionKey<T>>(
         value: radioValue,
@@ -170,7 +178,7 @@ class _InlineOptionState<T> extends State<_InlineOption<T>> {
                   YumeiroInputScope.keyboardFocusOf(context))
                 WidgetState.focused,
             },
-            scope?.visualOverride,
+            visualOverride,
           );
           return ColoredBox(
             color: Colors.transparent,
@@ -211,6 +219,12 @@ class _InlineOptionState<T> extends State<_InlineOption<T>> {
           : YumeiroInteractiveVisualSurface(
               role: YumeiroItemRole.selection,
               selected: widget.selected,
+              visualOverride: widget.disabledForItem
+                  ? unavailableSelectionVisualOverride(
+                      context,
+                      YumeiroItemRole.selection,
+                    )
+                  : null,
               onTap: _interactive ? widget.onPressed : null,
               visualInsets: visualInsets,
               child: content,

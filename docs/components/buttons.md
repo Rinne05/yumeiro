@@ -24,7 +24,7 @@
 ## 内容和状态
 
 - 至少提供 `label`、`icon` 或 `customLeading` 中的一项。需要在正文后面放图标时，使用 `trailingIcon`。
-- `onPressed: null` 禁用操作。`selected` 由调用方维护，可用于有保持状态的操作。`badge` 显示一个提示圆点。
+- `onPressed: null` 禁用操作。`selected` 由调用方维护，可用于有保持状态的操作。`badge` 显示提示圆点，复古像素主题使用阶梯式轮廓。
 - `dense` 使用紧凑样式，`expand` 可让按钮填充可用宽度。列表或工具栏中的按钮应与区域的触控密度一起检查。
 - 纯图标按钮需要提供操作名称，例如 `tooltip: '移除任务'`。按钮会在键盘聚焦或悬停时显示提示。只需要读屏名称时可传 `semanticLabel`，两者都提供时优先用 `semanticLabel` 命名。外部 `focusNode` 由创建者释放。
 

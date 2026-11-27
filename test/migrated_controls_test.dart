@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yumeiro/src/components/controls/select_trigger.dart';
+import 'package:yumeiro/src/components/controls/selection_control.dart';
 import 'package:yumeiro/yumeiro.dart';
 
 Widget _wrap({
@@ -434,6 +435,12 @@ void main() {
               value: 'render/blur',
               label: 'Blur',
             ),
+            YumeiroCascadingOption(
+              id: 'render/locked',
+              value: 'render/locked',
+              label: 'Locked rendering',
+              enabled: false,
+            ),
           ],
         ),
         YumeiroCascadingOption<String>.branch(
@@ -444,6 +451,18 @@ void main() {
               id: 'layout/touch',
               value: 'layout/touch',
               label: 'Touch',
+            ),
+          ],
+        ),
+        YumeiroCascadingOption<String>.branch(
+          id: 'locked',
+          label: 'Locked branch',
+          enabled: false,
+          children: [
+            YumeiroCascadingOption(
+              id: 'locked/child',
+              value: 'locked/child',
+              label: 'Locked child',
             ),
           ],
         ),
@@ -467,6 +486,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Optical'), findsOneWidget);
       expect(find.text('Touch'), findsNothing);
+      expect(find.byType(UnavailableSelectionMark), findsNWidgets(2));
+      await tester.tap(find.text('Locked branch'));
+      await tester.tap(find.text('Locked rendering'));
+      await tester.pumpAndSettle();
+      expect(find.text('Locked child'), findsNothing);
+      expect(selected, 'render/optical');
 
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       addTearDown(mouse.removePointer);
@@ -518,6 +543,10 @@ void main() {
           .selected;
       expect(option('Render'), findsOneWidget);
       expect(option('Touch'), findsNothing);
+      expect(find.byType(UnavailableSelectionMark), findsOneWidget);
+      await tester.tap(option('Locked branch'));
+      await tester.pumpAndSettle();
+      expect(option('Locked child'), findsNothing);
       expect(isHighlighted('Layout'), isTrue);
 
       await tester.tap(option('Layout'));

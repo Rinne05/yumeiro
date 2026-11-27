@@ -1,6 +1,7 @@
 part of 'data_table.dart';
 
 const _selectionColumnKey = ValueKey('selection-column');
+const _selectionMarkKey = ValueKey('yumeiro-table-selection-mark');
 
 /// Column calculations are shared by the header and every box or sliver row.
 class _TableLayout<T> {
@@ -234,7 +235,7 @@ class _TableRows<T> {
     final multiple = selection.mode == YumeiroTableSelectionMode.multiple;
     final l10n = YumeiroLocalizations.of(context);
     final toggleAll = selection.toggleAll;
-    final selectAll = YumeiroCheckbox(
+    final selectAll = buildYumeiroSelectionCheckbox(
       dense: !_isSummary,
       label: _isSummary || !showIndicator ? l10n.selectAll : null,
       tristate: true,
@@ -358,15 +359,22 @@ class _TableRows<T> {
     BuildContext context,
     _TableTracks tracks,
     int index, {
+    int? displayIndex,
     Widget Function(Widget)? fitRow,
     YumeiroVisualAppearance? surface,
   }) {
     final item = table.items[index];
     final mode = selection.mode;
+    final multiple = mode == YumeiroTableSelectionMode.multiple;
+    final visualIndex = displayIndex ?? index;
     final toggle = showIndicator || _selectBody
         ? selection.toggleFor(index)
         : null;
     final selected = selection.isSelected(index);
+    final disabledSelection =
+        showIndicator &&
+        table.selection?.onChanged != null &&
+        !selection.isItemEnabled(index);
     final rowLabel = table.rowSemanticsLabel?.call(item);
     final activate = switch (behavior) {
       YumeiroTableRowTapBehavior.select => toggle,
@@ -461,21 +469,29 @@ class _TableRows<T> {
                     alignment: _indicatorAlignment,
                     child: _selectBody
                         ? buildSelectionIndicator(
-                            multiple:
-                                mode == YumeiroTableSelectionMode.multiple,
+                            multiple: multiple,
                             selected: selected,
                             onToggle: toggle,
                             dense: dense,
+                            disabledForItem: disabledSelection,
+                            markKey: _selectionMarkKey,
                           )
-                        : _buildControl(
-                            mode!,
-                            index,
-                            selected,
-                            toggle,
-                            dense: dense && !_isSummary,
-                            label:
-                                rowLabel ??
-                                YumeiroLocalizations.of(context).selectItem,
+                        : SelectionControlMark(
+                            multiple: multiple,
+                            selected: selected,
+                            enabled: toggle != null,
+                            disabledForItem: disabledSelection,
+                            markKey: _selectionMarkKey,
+                            child: _buildControl(
+                              mode!,
+                              index,
+                              selected,
+                              toggle,
+                              dense: dense && !_isSummary,
+                              label:
+                                  rowLabel ??
+                                  YumeiroLocalizations.of(context).selectItem,
+                            ),
                           ),
                   ),
                 ),
@@ -493,12 +509,13 @@ class _TableRows<T> {
     final menu = table.contextMenuBuilder;
     final row = DecoratedBox(
       position: DecorationPosition.foreground,
-      decoration: index == table.items.length - 1
+      decoration: visualIndex == table.items.length - 1
           ? const BoxDecoration()
           : rowDividerDecoration(theme.line),
       child: _TableRowFrame(
         selectable: mode != null,
         bodySelects: _selectBody,
+        showsDisabledSelection: disabledSelection,
         single: mode == YumeiroTableSelectionMode.single,
         selected: selected,
         onTap: activate,
@@ -533,7 +550,7 @@ class _TableRows<T> {
       );
     }
     if (fitRow != null) {
-      content = fitRow(IndexedSemantics(index: index, child: content));
+      content = fitRow(IndexedSemantics(index: visualIndex, child: content));
     }
     return Semantics(
       role: SemanticsRole.row,
@@ -609,6 +626,7 @@ class _TableRowFrame extends StatefulWidget {
   const _TableRowFrame({
     required this.selectable,
     required this.bodySelects,
+    required this.showsDisabledSelection,
     required this.single,
     required this.selected,
     required this.onTap,
@@ -620,6 +638,7 @@ class _TableRowFrame extends StatefulWidget {
 
   final bool selectable;
   final bool bodySelects;
+  final bool showsDisabledSelection;
   final bool single;
   final bool selected;
   final VoidCallback? onTap;
@@ -675,7 +694,10 @@ class _TableRowFrameState extends State<_TableRowFrame> {
       {
         ..._states.value.where((state) => state != WidgetState.disabled),
         if (widget.selected) WidgetState.selected,
-        if (widget.bodySelects && widget.onTap == null) WidgetState.disabled,
+        if (widget.bodySelects &&
+            widget.onTap == null &&
+            !widget.showsDisabledSelection)
+          WidgetState.disabled,
       },
       scope?.visualOverride,
     );

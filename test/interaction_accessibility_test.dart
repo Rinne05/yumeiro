@@ -352,7 +352,7 @@ void main() {
     expect(controller.entries, isEmpty);
   });
 
-  testWidgets('stacked toasts scroll and reveal focus on a short screen', (
+  testWidgets('only the foreground toast can receive focus on a short screen', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(320, 568));
@@ -360,6 +360,7 @@ void main() {
     final controller = YumeiroToastController();
     addTearDown(controller.dispose);
     final activated = <int>[];
+    final ids = <int>[];
     await tester.pumpWidget(
       YumeiroApp(
         modality: YumeiroModality.touch,
@@ -374,25 +375,34 @@ void main() {
       ),
     );
     for (var number = 1; number <= 4; number++) {
-      controller.show(
-        title: 'Attachment $number failed',
-        message:
-            'Unable to upload the selected file. Retry after reconnecting.',
-        copyOnTap: false,
-        onTap: () => activated.add(number),
+      ids.add(
+        controller.show(
+          title: 'Attachment $number failed',
+          message:
+              'Unable to upload the selected file. Retry after reconnecting.',
+          copyOnTap: false,
+          onTap: () => activated.add(number),
+        ),
       );
     }
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
-    expect(scrollable.position.maxScrollExtent, greaterThan(0));
+    expect(find.byType(YumeiroToast), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('Attachment [123] failed')),
+      findsNothing,
+    );
     expect(find.text('Attachment 4 failed').hitTestable(), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();
-    expect(find.text('Attachment 1 failed').hitTestable(), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    expect(activated, [1]);
+    expect(activated, [4]);
+
+    controller.dismiss(ids.last);
+    await tester.pumpAndSettle();
+    expect(find.byType(YumeiroToast), findsOneWidget);
+    expect(find.text('Attachment 3 failed').hitTestable(), findsOneWidget);
   });
 
   testWidgets('toast spacing lets pointer events reach the page below', (

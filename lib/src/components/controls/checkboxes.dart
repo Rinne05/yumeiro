@@ -1,7 +1,10 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../foundation/color_math.dart';
 import '../../foundation/input.dart';
 import '../../foundation/modality.dart';
+import '../../primitives/pixel_border.dart';
+import '../../primitives/selection_marks.dart';
 import '../../theme/theme.dart';
 import 'boolean_form_fields.dart';
 
@@ -19,20 +22,22 @@ class YumeiroCheckbox extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.spacing = 8.0,
-  }) : _rowOwnsDisabledOpacity = false;
+  }) : _rowOwnsDisabledOpacity = false,
+       _showUnavailableMark = true;
 
-  const YumeiroCheckbox._inRow({
+  const YumeiroCheckbox._selection({
     required this.value,
     required this.onChanged,
     required this.dense,
-  }) : tristate = false,
-       label = null,
-       labelWidget = null,
+    required this._rowOwnsDisabledOpacity,
+    this.tristate = false,
+    this.label,
+    this.spacing = 8.0,
+  }) : labelWidget = null,
        enabled = true,
        focusNode = null,
        autofocus = false,
-       spacing = 8.0,
-       _rowOwnsDisabledOpacity = true;
+       _showUnavailableMark = false;
 
   /// Creates a checkbox field for a Flutter [Form].
   ///
@@ -93,7 +98,8 @@ class YumeiroCheckbox extends StatelessWidget {
   final bool? value;
 
   /// Requests the next value. Store it in the host to update [value].
-  /// Null or [enabled] set to false disables the control.
+  /// Null or [enabled] set to false disables the control and marks it with a
+  /// slash. Selected and mixed values use the same disabled appearance.
   final ValueChanged<bool?>? onChanged;
 
   /// Supports mixed selection and cycles false, true, and null on activation.
@@ -107,12 +113,14 @@ class YumeiroCheckbox extends StatelessWidget {
   final double spacing;
 
   final bool _rowOwnsDisabledOpacity;
+  final bool _showUnavailableMark;
 
   @override
   Widget build(BuildContext context) {
     final theme = YumeiroTheme.of(context);
     final metrics = YumeiroModalityScope.metricsOf(context);
     final effectiveEnabled = enabled && onChanged != null;
+    final showUnavailableMark = _showUnavailableMark && !effectiveEnabled;
     final size = metrics.isTouch
         ? metrics.minTargetSize
         : (dense ? metrics.checkboxSize + 6 : metrics.checkboxSize + 10);
@@ -127,6 +135,7 @@ class YumeiroCheckbox extends StatelessWidget {
           tristate: tristate,
           onChanged: effectiveEnabled ? onChanged : null,
           rowOwnsDisabledOpacity: _rowOwnsDisabledOpacity,
+          showUnavailableMark: showUnavailableMark,
           focusNode: focusNode,
           autofocus: effectiveEnabled && autofocus,
         ),
@@ -138,7 +147,10 @@ class YumeiroCheckbox extends StatelessWidget {
       labelPart = Text(
         label!,
         style: theme.typography
-            .control(selected: value == true, dense: dense)
+            .control(
+              selected: value == true || (showUnavailableMark && value == null),
+              dense: dense,
+            )
             .copyWith(color: effectiveEnabled ? theme.text : theme.subtle),
       );
     }
@@ -185,7 +197,30 @@ YumeiroCheckbox buildYumeiroRowCheckbox({
   required bool value,
   required ValueChanged<bool?>? onChanged,
   bool dense = false,
-}) => YumeiroCheckbox._inRow(value: value, onChanged: onChanged, dense: dense);
+}) => YumeiroCheckbox._selection(
+  value: value,
+  onChanged: onChanged,
+  dense: dense,
+  rowOwnsDisabledOpacity: true,
+);
+
+/// Builds the checkbox used when a selection group owns its disabled marker.
+YumeiroCheckbox buildYumeiroSelectionCheckbox({
+  required bool? value,
+  required ValueChanged<bool?>? onChanged,
+  bool tristate = false,
+  bool dense = false,
+  String? label,
+  double spacing = 8.0,
+}) => YumeiroCheckbox._selection(
+  value: value,
+  onChanged: onChanged,
+  dense: dense,
+  tristate: tristate,
+  label: label,
+  spacing: spacing,
+  rowOwnsDisabledOpacity: false,
+);
 
 Widget _buildMaterialCheckbox(
   BuildContext context, {
@@ -193,10 +228,13 @@ Widget _buildMaterialCheckbox(
   required bool tristate,
   required ValueChanged<bool?>? onChanged,
   required bool rowOwnsDisabledOpacity,
+  required bool showUnavailableMark,
   FocusNode? focusNode,
   bool autofocus = false,
 }) {
-  final visuals = YumeiroTheme.of(context).checkboxVisuals;
+  final theme = YumeiroTheme.of(context);
+  final visuals = theme.checkboxVisuals;
+  final pixel = visuals.shape is YumeiroPixelBorder;
   final metrics = YumeiroModalityScope.metricsOf(context);
   final keyboardFocus = YumeiroInputScope.keyboardFocusOf(context);
 
@@ -235,16 +273,42 @@ Widget _buildMaterialCheckbox(
         )
       : baseTheme;
 
-  return CheckboxTheme(
-    data: effectiveTheme,
-    child: Checkbox(
-      value: value,
-      tristate: tristate,
-      onChanged: onChanged,
-      focusNode: focusNode,
-      autofocus: autofocus,
-      side: WidgetStateBorderSide.resolveWith(
-        (states) => visuals.side.resolve(paintStates(states)),
+  final markerColor = showUnavailableMark
+      ? unavailableMarkInk(
+          yumeiroAlphaBlend(
+            visuals.fillColor.resolve({
+                  WidgetState.disabled,
+                  if (value != false) WidgetState.selected,
+                }) ??
+                Colors.transparent,
+            theme.surface,
+          ),
+        )
+      : null;
+
+  return CustomPaint(
+    foregroundPainter: markerColor == null
+        ? null
+        : UnavailableSlashPainter(
+            color: markerColor,
+            extent: Checkbox.width,
+            pixel: pixel,
+          ),
+    child: CheckboxTheme(
+      data: effectiveTheme,
+      child: Checkbox(
+        value: value,
+        tristate: tristate,
+        onChanged: onChanged,
+        checkColor: showUnavailableMark ? Colors.transparent : null,
+        focusNode: focusNode,
+        autofocus: autofocus,
+        side: WidgetStateBorderSide.resolveWith((states) {
+          final outline = visuals.side.resolve(paintStates(states));
+          return showUnavailableMark && pixel
+              ? outline?.copyWith(color: theme.subtle)
+              : outline;
+        }),
       ),
     ),
   );

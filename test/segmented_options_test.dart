@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:yumeiro/src/components/controls/selection_control.dart';
 import 'package:yumeiro/yumeiro.dart';
 
 void main() {
@@ -87,6 +88,102 @@ void main() {
   });
 
   for (final modality in YumeiroModality.values) {
+    testWidgets(
+      'unavailable segments keep selection without a tap action in ${modality.name}',
+      (tester) async {
+        const options = [
+          YumeiroSegmentOption(value: 'ready', label: 'Ready'),
+          YumeiroSegmentOption(
+            value: 'locked',
+            label: 'Locked',
+            enabled: false,
+          ),
+        ];
+        final changes = <String>[];
+
+        Future<void> pump({
+          required bool vertical,
+          required bool expanded,
+          required bool editable,
+        }) => tester.pumpWidget(
+          YumeiroApp(
+            preset: YumeiroThemePresets.pixelDark,
+            modality: modality,
+            home: Scaffold(
+              body: SizedBox(
+                width: 160,
+                child: vertical
+                    ? YumeiroSegmentedControl.vertical(
+                        options: options,
+                        value: 'locked',
+                        onChanged: editable ? changes.add : null,
+                        showCheckmark: false,
+                      )
+                    : YumeiroSegmentedControl(
+                        options: options,
+                        value: 'locked',
+                        onChanged: editable ? changes.add : null,
+                        expand: expanded,
+                      ),
+              ),
+            ),
+          ),
+        );
+
+        for (final (vertical, expanded) in [
+          (false, false),
+          (false, true),
+          (true, false),
+        ]) {
+          changes.clear();
+          await pump(vertical: vertical, expanded: expanded, editable: true);
+          await tester.pumpAndSettle();
+          final marker = find.byType(UnavailableSelectionMark);
+          expect(marker, findsOneWidget);
+          expect(
+            tester.widget<UnavailableSelectionMark>(marker).selected,
+            true,
+          );
+
+          final locked = find.text('Locked');
+          final lockedContext = tester.element(locked);
+          final selectedVisual = YumeiroTheme.of(lockedContext).visuals
+              .item(YumeiroItemRole.selection, {WidgetState.selected});
+          expect(
+            DefaultTextStyle.of(lockedContext).style.color,
+            selectedVisual.foreground,
+          );
+          final rowOpacity = find.ancestor(
+            of: marker,
+            matching: find.byType(AnimatedOpacity),
+          );
+          expect(
+            tester
+                .widgetList<AnimatedOpacity>(rowOpacity)
+                .map((widget) => widget.opacity),
+            everyElement(1.0),
+          );
+          expect(
+            tester.getSemantics(locked),
+            isSemantics(
+              isSelected: true,
+              hasEnabledState: true,
+              isEnabled: false,
+              hasTapAction: false,
+            ),
+          );
+          await tester.tapAt(tester.getCenter(locked));
+          expect(changes, isEmpty);
+          await tester.tap(find.text('Ready'));
+          expect(changes, ['ready']);
+
+          await pump(vertical: vertical, expanded: expanded, editable: false);
+          await tester.pumpAndSettle();
+          expect(marker, findsNothing);
+        }
+      },
+    );
+
     testWidgets(
       'shared segment options retain both layouts in ${modality.name}',
       (tester) async {

@@ -1,5 +1,7 @@
 part of 'theme_preset.dart';
 
+const _pixelDefaultButtonStep = 3.0;
+
 const _neoBrutalistColors = YumeiroColorTokens(
   background: Color(0xFFFFF5B8),
   sidebar: Color(0xFFFCE75B),
@@ -596,12 +598,16 @@ YumeiroSwitchVisuals _pixelSwitchVisualsBuilder(
   YumeiroColorTokens colors,
   YumeiroSemanticVisualTheme visuals,
 ) {
+  const thumbSize = 18.0;
   final controlShape = visuals
       .control(YumeiroControlRole.neutral, const {})
       .shape;
-  final shape = YumeiroPixelBorder(
-    step: controlShape is YumeiroPixelBorder ? controlShape.step * 2 / 3 : 2,
-  );
+  final roundness = controlShape is YumeiroPixelBorder
+      ? controlShape.step / _pixelDefaultButtonStep
+      : 1.0;
+  final trackShape = YumeiroPixelBorder(step: 2 * roundness);
+  final thumbShape =
+      pixelCircleBorder(thumbSize).scale(roundness) as OutlinedBorder;
 
   YumeiroVisualAppearance track(Set<WidgetState> states) => visuals
       .control(
@@ -610,7 +616,7 @@ YumeiroSwitchVisuals _pixelSwitchVisualsBuilder(
             : YumeiroControlRole.neutral,
         states,
       )
-      .copyWith(shape: shape);
+      .copyWith(shape: trackShape);
 
   YumeiroVisualAppearance thumb(Set<WidgetState> states) => visuals
       .control(
@@ -619,7 +625,7 @@ YumeiroSwitchVisuals _pixelSwitchVisualsBuilder(
       )
       .copyWith(
         fill: YumeiroSolidFill(colors.surfaceElevated),
-        shape: shape,
+        shape: thumbShape,
         focusIndicator: YumeiroFocusIndicator.none,
       );
 
@@ -636,6 +642,6 @@ YumeiroSwitchVisuals _pixelSwitchVisualsBuilder(
       states: WidgetStateProperty.resolveWith(thumb),
     ),
     trackSize: const Size(46, 26),
-    thumbSize: 18,
+    thumbSize: thumbSize,
   );
 }
